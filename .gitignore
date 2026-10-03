@@ -25,3 +25,7 @@ _web/check_map32.png
 _web/check_sprite.png
 _web/frames.png
 _web/gusana.png
+
+# botin del recolector: datos de un servidor ajeno, no van al repo publico
+_servicios/botin*.json
+_servicios/mobs_por_mapa.json

@@ -61,6 +61,17 @@ def _destino():
 
 UPSTREAM = _destino()
 ARREGLAR = '--crudo' not in sys.argv
+
+# Recolector opcional: `--botin fichero.json` va acumulando el catalogo del
+# juego (objetos, criaturas, magias) y lo que se deduce de jugar. Ver botin.py.
+def _ruta_botin():
+    if '--botin' in sys.argv:
+        i = sys.argv.index('--botin') + 1
+        return sys.argv[i] if i < len(sys.argv) else 'botin.json'
+    return None
+
+
+BOTIN = None
 SEP = b'\x00'
 END = bytes([237])
 LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'adapter_log.txt')
@@ -146,6 +157,7 @@ def anotar_jugador(pkt, ses):
     if not ses.get('indice') or f[1].strip() != ses['indice']:
         return
     mapa = f[4].strip()                       # se queda en bytes: va tal cual al server
+    ses['mapa_txt'] = mapa.decode('latin1', 'replace')   # para el recolector
     nombre = f[2].strip().decode('latin1', 'replace')
     if not nombre or mapa in (b'', b'0'):
         return                     # mapa 0 = esta saliendo del mapa, no es sitio
@@ -315,6 +327,8 @@ def pump(src, dst, tag, fix, ses):
 
                 if fix:
                     anotar_jugador(pkt, ses)     # quien es y donde esta
+                    if BOTIN:
+                        BOTIN.mira(pkt, ses)
                 else:
                     pkt = interceptar_warp(pkt, ses)
                     if pkt is None:
@@ -365,6 +379,19 @@ if __name__ == '__main__':
     srv.listen(5)
     modo = 'con arreglos de Dreaminze 1.3' if ARREGLAR else 'CRUDO (sin tocar nada)'
     log(f'adaptador  {LISTEN[0]}:{LISTEN[1]} -> {UPSTREAM[0]}:{UPSTREAM[1]}   {modo}')
-    while True:
-        c, a = srv.accept()
-        threading.Thread(target=handle, args=(c, a), daemon=True).start()
+
+    ruta = _ruta_botin()
+    if ruta:
+        from botin import Botin
+        BOTIN = Botin(ruta, avisar=log)
+        log(f'recolector encendido -> {ruta}')
+        log(f'  {BOTIN.resumen()}')
+
+    try:
+        while True:
+            c, a = srv.accept()
+            threading.Thread(target=handle, args=(c, a), daemon=True).start()
+    except KeyboardInterrupt:
+        if BOTIN:
+            BOTIN.guardar()
+            log(f'\nbotin guardado en {ruta}\n  {BOTIN.resumen()}')
