@@ -10,6 +10,7 @@
 !/README.md
 !/_web/
 !/_servicios/
+!/captura.png
 
 # --- dentro de lo nuestro, lo que tampoco va ---
 __pycache__/

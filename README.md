@@ -7,6 +7,11 @@ Dreaminze Engine sin modificarle nada.
 Mapas, sprites, música, combate, clima, inventario, equipo, magias, chat, y
 registro de cuentas y personajes.
 
+![el cliente web corriendo](captura.png)
+
+*Así se tiene que ver cuando está bien: la interfaz del cliente original, el
+mapa sin casillas corridas ni huecos, y el pie con mapa, posición y música.*
+
 ---
 
 ## 1. Arranque
@@ -255,3 +260,19 @@ el equipo— se **midieron**: se mueve el personaje desde el cliente web, se
 captura la ventana del cliente de Windows y se busca por fuerza bruta qué
 combinación reproduce esos píxeles. Por eso el muñeco sale idéntico píxel a píxel
 en las cuatro direcciones, con y sin equipo.
+
+---
+
+## 9. De quién es cada cosa
+
+**Dream Blue Online** es un juego de 2006 de TSP / Dreaminze, hoy fuera de
+servicio. Los gráficos, la música y los mapas que hay en `_web/assets/` son
+suyos: están aquí porque sin ellos el cliente no arranca y no hay forma de
+comprobar que funciona. No se reclama ninguna autoría sobre ese material.
+
+El código de este repositorio —el cliente en JavaScript, el adaptador, el puente
+y los generadores— es trabajo propio, hecho desde cero. Es un proyecto de
+aficionados para que un juego muerto se pueda seguir jugando, sin ánimo de lucro.
+
+Si a alguien con derechos sobre el original le molesta que su material esté aquí,
+se quita.
