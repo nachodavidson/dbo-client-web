@@ -27,7 +27,16 @@ import socket, threading, os, sys
 
 # 0.0.0.0 = acepta tambien desde la red virtual (Tailscale) y la LAN.
 # NO hay puerto abierto en el router: solo llega quien este en la VPN.
-LISTEN = ('0.0.0.0', 4000)
+#
+# El puerto se puede cambiar con --escucha. Hace falta si el servidor del juego
+# corre en el 4000 de ESTA misma maquina: entonces chocarian.
+def _escucha():
+    if '--escucha' in sys.argv:
+        return ('0.0.0.0', int(sys.argv[sys.argv.index('--escucha') + 1]))
+    return ('0.0.0.0', 4000)
+
+
+LISTEN = _escucha()
 
 # A que servidor se le habla. Por defecto el de esta maquina, pero se puede
 # apuntar a OTRO para probar el cliente web contra un servidor ajeno:
@@ -41,8 +50,9 @@ LISTEN = ('0.0.0.0', 4000)
 # servidor del otro lado esta modificado pueden estorbar en vez de ayudar: con
 # --crudo el adaptador solo mira y registra, no toca ni un byte.
 def _destino():
+    saltar = sys.argv[sys.argv.index('--escucha') + 1] if '--escucha' in sys.argv else None
     for a in sys.argv[1:]:
-        if a.startswith('-') or ':' not in a:
+        if a.startswith('-') or ':' not in a or a == saltar:
             continue
         host, _, puerto = a.rpartition(':')
         return (host, int(puerto))

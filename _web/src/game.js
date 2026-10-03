@@ -8,7 +8,9 @@ import { Musica } from './midi.js';
 import { Efectos, color } from './efectos.js';
 
 const MS_POR_CASILLA = 150;     // velocidad de caminata (ajustable en vivo)
-const HOJAS_TILES = 7;
+// Tope de busqueda, no cuenta real: se cargan tiles0, tiles1... hasta que
+// falte uno. Esta instalacion tiene 7; otras tienen mas.
+const HOJAS_TILES_MAX = 32;
 
 const $ = (s) => document.querySelector(s);
 const estado = {
@@ -65,26 +67,40 @@ function cargarImagen(url) {
   });
 }
 
+// Cuantas hojas de tiles hay NO se sabe de antemano: depende de la
+// instalacion (aqui 7, el cliente de Dreaminze tiene 11). Se cargan hasta que
+// falte la siguiente, asi nadie tiene que acordarse de cambiar un numero.
+async function cargarTiles(progreso) {
+  const hojas = [];
+  for (let i = 0; i < HOJAS_TILES_MAX; i++) {
+    try {
+      hojas.push(await cargarHoja(`tiles${i}`));
+      progreso();
+    } catch (e) {
+      break;
+    }
+  }
+  if (!hojas.length) throw new Error('no hay ni una hoja de tiles en assets/');
+  return hojas;
+}
+
 async function cargarTodo(progreso) {
   const t0 = performance.now();
-  const tareas = [];
-  for (let i = 0; i < HOJAS_TILES; i++) tareas.push(cargarHoja(`tiles${i}`));
-  tareas.push(cargarHoja('sprites'));
-  tareas.push(cargarHoja('bigsprites'));
-  tareas.push(cargarHoja('items'));
-  tareas.push(cargarHoja('arrows'));
-  tareas.push(cargarHoja('spells'));
-  tareas.push(cargarMapas('assets/maps.bin'));
-
+  // Las hojas de tiles van en serie (hay que ver donde se acaban); el resto en
+  // paralelo. El total es aproximado: la barra solo tiene que avanzar.
+  const aviso = () => progreso(++hechas, PASOS);
   let hechas = 0;
-  const conAviso = tareas.map(p => p.then(r => { progreso(++hechas, tareas.length); return r; }));
-  const res = await Promise.all(conAviso);
+  const PASOS = HOJAS_TILES_MAX + 6;
 
-  const tiles = res.slice(0, HOJAS_TILES);
+  const tiles = await cargarTiles(aviso);
+  const tareas = ['sprites', 'bigsprites', 'items', 'arrows', 'spells']
+    .map((n) => cargarHoja(n));
+  tareas.push(cargarMapas('assets/maps.bin'));
+  const res = await Promise.all(tareas.map((p) => p.then((r) => { aviso(); return r; })));
+
   return {
-    tiles, sprites: res[HOJAS_TILES], grandes: res[HOJAS_TILES + 1],
-    items: res[HOJAS_TILES + 2], flechas: res[HOJAS_TILES + 3],
-    hechizos: res[HOJAS_TILES + 4], mapas: res[HOJAS_TILES + 5],
+    tiles, sprites: res[0], grandes: res[1], items: res[2],
+    flechas: res[3], hechizos: res[4], mapas: res[5],
     ms: performance.now() - t0,
   };
 }
@@ -733,9 +749,15 @@ function comprobarServidor() {
   ws.onclose = () => { clearTimeout(fallo); poner(false); };
 }
 
+// Donde escucha wsbridge.py. Si lo arrancas con otro puerto (--escucha), este
+// es el UNICO sitio del cliente que hay que cambiar.
+// Se usa el host de la pagina, no 127.0.0.1: asi entrar desde otro equipo por
+// la red o la VPN funciona sin tocar nada.
+const PUERTO_PUENTE = 4002;
+
 function urlPuente() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.hostname}:4002`;
+  return `${proto}://${location.hostname}:${PUERTO_PUENTE}`;
 }
 
 // Crear y borrar cuenta se hacen SIN haber entrado: el servidor los acepta en

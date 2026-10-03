@@ -14,11 +14,34 @@ El flujo de bytes del juego se reenvia tal cual en tramas binarias; el cliente
 web parte por el terminador Chr(237) igual que haria el cliente original.
 
 Sin dependencias: el handshake y el framing van implementados a mano.
+
+Uso:
+  python wsbridge.py                        # escucha 4002, habla al 4000 local
+  python wsbridge.py 127.0.0.1:4100         # el adaptador esta en otro puerto
+  python wsbridge.py --escucha 4003
 """
 import socket, threading, base64, hashlib, struct, sys
 
-ESCUCHA = ('0.0.0.0', 4002)
-JUEGO = ('127.0.0.1', 4000)
+
+def _puerto(bandera, por_defecto):
+    if bandera in sys.argv:
+        return int(sys.argv[sys.argv.index(bandera) + 1])
+    return por_defecto
+
+
+def _destino():
+    """A donde se le habla: normalmente el adaptador, en el 4000 de aqui."""
+    saltar = sys.argv[sys.argv.index('--escucha') + 1] if '--escucha' in sys.argv else None
+    for a in sys.argv[1:]:
+        if a.startswith('-') or ':' not in a or a == saltar:
+            continue
+        host, _, puerto = a.rpartition(':')
+        return (host, int(puerto))
+    return ('127.0.0.1', 4000)
+
+
+ESCUCHA = ('0.0.0.0', _puerto('--escucha', 4002))
+JUEGO = _destino()
 GUID = b'258EAFA5-E914-47DA-95CA-C5AB0DC85B11'   # constante del RFC 6455
 
 
