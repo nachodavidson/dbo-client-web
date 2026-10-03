@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Dream Blue Online - Mapa del mundo</title>
+<style>
+  :root {
+    --tinta: #e8e2d0;
+    --tenue: #8d8672;
+    --fondo: #0a0c12;
+    --panel: #161a24;
+    --borde: #2b3242;
+    --oro:   #f0d000;
+    --rojo:  #e02020;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    background: var(--fondo); color: var(--tinta);
+    font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
+
+  /* ---- barra superior ---- */
+  #barra { position: fixed; inset: 0 0 auto 0; height: 46px; z-index: 30;
+    display: flex; align-items: center; gap: 14px; padding: 0 14px;
+    background: rgba(12,15,22,.93); border-bottom: 1px solid var(--borde);
+    backdrop-filter: blur(6px); }
+  #barra h1 { font-size: 14px; margin: 0; letter-spacing: .04em; white-space: nowrap; }
+  #barra h1 b { color: var(--oro); }
+  .sep { width: 1px; height: 22px; background: var(--borde); }
+  label.chk { display: flex; align-items: center; gap: 5px; cursor: pointer;
+    color: var(--tenue); white-space: nowrap; user-select: none; }
+  label.chk:hover { color: var(--tinta); }
+  label.chk input { accent-color: var(--oro); cursor: pointer; }
+  #buscar { background: #0d1017; border: 1px solid var(--borde); color: var(--tinta);
+    padding: 5px 9px; border-radius: 4px; width: 190px; outline: none; }
+  #buscar:focus { border-color: var(--oro); }
+  .btn { background: #1d2331; border: 1px solid var(--borde); color: var(--tinta);
+    padding: 5px 11px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .btn:hover { border-color: var(--oro); }
+  #zoomTxt { color: var(--tenue); min-width: 52px; text-align: right;
+    font-variant-numeric: tabular-nums; }
+
+  /* ---- lienzo ---- */
+  #vista { position: fixed; inset: 46px 0 0 0; overflow: hidden;
+    cursor: grab; background:
+      radial-gradient(ellipse at 40% 25%, #131a2b 0%, var(--fondo) 70%); }
+  #vista.arrastrando { cursor: grabbing; }
+  #mundo { position: absolute; transform-origin: 0 0; will-change: transform; }
+  #mundo canvas { position: absolute; image-rendering: pixelated;
+    background: #05070b; }
+
+  /* Los rotulos viven dentro del mundo pero se des-escalan con --z para que
+     midan siempre lo mismo en pantalla, sin importar el zoom. */
+  .rotulo { position: absolute; transform-origin: 50% 0;
+    transform: translateX(-50%) scale(calc(1 / var(--z)));
+    white-space: nowrap; pointer-events: none;
+    font-size: 11px; padding: 1px 5px; border-radius: 3px;
+    background: rgba(8,10,16,.82); color: #d9e4ff; text-shadow: 0 1px 2px #000; }
+  .rotulo i { color: var(--tenue); font-style: normal; }
+  .rotulo.hit { background: var(--oro); color: #1a1400; font-weight: 700; }
+  #mundo.sin-rotulos .rotulo { display: none; }
+
+  .marco { position: absolute; pointer-events: none; border: 1px solid transparent; }
+  #mundo.ver-comp .marco { border-color: rgba(255,255,255,.10); }
+  .marco.sel { border-color: var(--oro) !important; box-shadow: 0 0 0 2px rgba(240,208,0,.28); }
+  .marco.desp { border-color: rgba(224,32,32,.55) !important; }
+
+  /* ---- panel lateral ---- */
+  #ficha { position: fixed; top: 58px; right: 12px; width: 268px; z-index: 25;
+    max-height: calc(100% - 74px); overflow-y: auto; display: none;
+    background: rgba(18,22,32,.96); border: 1px solid var(--borde);
+    border-radius: 7px; padding: 13px 15px; }
+  #ficha.on { display: block; }
+  #ficha h2 { margin: 0 0 2px; font-size: 15px; color: var(--oro); }
+  #ficha .sub { color: var(--tenue); font-size: 11px; margin-bottom: 10px; }
+  #ficha dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px;
+    margin: 0 0 10px; font-size: 12px; }
+  #ficha dt { color: var(--tenue); }
+  #ficha dd { margin: 0; }
+  #ficha h3 { font-size: 11px; color: var(--tenue); text-transform: uppercase;
+    letter-spacing: .07em; margin: 12px 0 5px; border-top: 1px solid var(--borde);
+    padding-top: 9px; }
+  #ficha ul { margin: 0; padding-left: 16px; font-size: 12px; }
+  #ficha li { margin-bottom: 2px; }
+  #ficha a { color: #7fb4ff; cursor: pointer; text-decoration: none; }
+  #ficha a:hover { text-decoration: underline; }
+  #cerrar { position: absolute; top: 8px; right: 10px; cursor: pointer;
+    color: var(--tenue); font-size: 16px; line-height: 1; }
+  #cerrar:hover { color: var(--tinta); }
+
+  /* ---- carga ---- */
+  #carga { position: fixed; inset: 46px 0 0 0; z-index: 40; display: grid;
+    place-content: center; gap: 12px; text-align: center; background: var(--fondo); }
+  #carga.off { display: none; }
+  #barraCarga { width: 260px; height: 3px; background: #1d2331; border-radius: 2px; }
+  #barraCarga i { display: block; height: 100%; width: 0; background: var(--oro);
+    border-radius: 2px; transition: width .15s; }
+  #cargaTxt { color: var(--tenue); font-size: 12px; }
+
+  #pie { position: fixed; left: 12px; bottom: 10px; z-index: 25; color: var(--tenue);
+    font-size: 11px; background: rgba(10,12,18,.8); padding: 5px 9px;
+    border-radius: 4px; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div id="barra">
+  <h1><b>Dream Blue</b> &mdash; mapa del mundo</h1>
+  <div class="sep"></div>
+  <input id="buscar" type="search" placeholder="Buscar mapa o numero...">
+  <div class="sep"></div>
+  <label class="chk"><input type="checkbox" id="cbNombres" checked> Nombres</label>
+  <label class="chk"><input type="checkbox" id="cbWarps"> Warps</label>
+  <label class="chk"><input type="checkbox" id="cbBloqueo"> Colisiones</label>
+  <label class="chk"><input type="checkbox" id="cbComp" checked> Bordes</label>
+  <div class="sep"></div>
+  <button class="btn" id="btMenos">&minus;</button>
+  <span id="zoomTxt">100%</span>
+  <button class="btn" id="btMas">+</button>
+  <button class="btn" id="btAjustar">Encajar</button>
+  <button class="btn" id="btPng">PNG</button>
+</div>
+
+<div id="vista">
+  <div id="mundo"></div>
+</div>
+
+<div id="ficha">
+  <span id="cerrar">&times;</span>
+  <h2 id="fNombre"></h2>
+  <div class="sub" id="fSub"></div>
+  <dl id="fDatos"></dl>
+  <div id="fResto"></div>
+</div>
+
+<div id="pie">Arrastra para mover &middot; rueda para acercar &middot; clic en un mapa para ver su ficha</div>
+
+<div id="carga">
+  <div id="cargaTxt">Cargando los 210 mapas...</div>
+  <div id="barraCarga"><i id="progreso"></i></div>
+</div>
+
+<script type="module">
+import { cargarMapas, ANCHO, ALTO, TS, STRIDE, idx } from './src/maps.js';
+
+// ---------------------------------------------------------------------------
+// Constantes
+// ---------------------------------------------------------------------------
+const MINI   = 8;                    // pixeles por casilla en la vista macro
+const LADO   = ANCHO * MINI;         // 248 px por mapa en macro
+const LLENO  = ANCHO * TS;           // 992 px por mapa a resolucion nativa
+const DEBAJO = [0, 1, 2, 3, 4];      // suelo + mascaras (igual que render.js)
+const ENCIMA = [5, 6, 7, 8];         // fringes
+const DETALLE_DESDE = 1.15;          // zoom a partir del cual se sube la calidad
+const DETALLE_MAX   = 24;            // cuantos mapas se mantienen en alta
+
+const $ = (s) => document.querySelector(s);
+const vista = $('#vista'), mundo = $('#mundo');
+
+// ---------------------------------------------------------------------------
+// Carga de recursos
+// ---------------------------------------------------------------------------
+const paso = (t, p) => { $('#cargaTxt').textContent = t; $('#progreso').style.width = p + '%'; };
+
+async function hojas() {
+  const cargas = [];
+  for (let i = 0; i < 7; i++) {
+    cargas.push(new Promise((ok) => {
+      const im = new Image();
+      im.onload = () => ok(im);
+      im.onerror = () => ok(null);   // alguna hoja puede no existir: no es fatal
+      im.src = `assets/tiles${i}.webp`;
+    }));
+  }
+  return Promise.all(cargas);
+}
+
+paso('Leyendo mapas...', 8);
+const [mapas, tiles, mundoJson] = await Promise.all([
+  cargarMapas('assets/maps.bin'),
+  hojas(),
+  fetch('mundo.json').then((r) => r.json()),
+]);
+paso('Dibujando...', 22);
+
+const disposicion = mundoJson.mapas;
+
+// ---------------------------------------------------------------------------
+// Pintado de un mapa
+// ---------------------------------------------------------------------------
+// Siempre se compone primero a resolucion nativa (32 px/casilla) y luego se
+// reduce. Reducir una imagen ya compuesta se ve mucho mejor que dibujar cada
+// tile a 8 px, que destruye el pixel art.
+const lienzoAux = document.createElement('canvas');
+lienzoAux.width = lienzoAux.height = LLENO;
+const aux = lienzoAux.getContext('2d', { willReadFrequently: false });
+
+function componer(m) {
+  aux.imageSmoothingEnabled = false;
+  aux.fillStyle = '#05070b';
+  aux.fillRect(0, 0, LLENO, LLENO);
+  for (const grupo of [DEBAJO, ENCIMA]) {
+    for (let y = 0; y < ALTO; y++) {
+      for (let x = 0; x < ANCHO; x++) {
+        const i = idx(x, y);
+        for (const s of grupo) {
+          const v = m.capas[i * 9 + s];
+          if (v === 0) continue;
+          const hoja = tiles[m.hojas[i * 9 + s]];
+          if (!hoja) continue;
+          // Paso 14 aunque la hoja tenga 7 columnas: asi lo hace el motor.
+          const sx = (v % STRIDE) * TS, sy = ((v / STRIDE) | 0) * TS;
+          if (sx + TS > hoja.width || sy + TS > hoja.height) continue;
+          aux.drawImage(hoja, sx, sy, TS, TS, x * TS, y * TS, TS, TS);
+        }
+      }
+    }
+  }
+}
+
+function superponer(ctx, m, px) {
+  const verW = $('#cbWarps').checked, verB = $('#cbBloqueo').checked;
+  if (!verW && !verB) return;
+  for (let y = 0; y < ALTO; y++) {
+    for (let x = 0; x < ANCHO; x++) {
+      const t = m.tipos[idx(x, y)];
+      if (verW && t === 2) {
+        ctx.fillStyle = 'rgba(0,224,255,.60)';
+        ctx.fillRect(x * px, y * px, px, px);
+      } else if (verB && (t === 1 || t === 4 || t === 16 || t === 19)) {
+        ctx.fillStyle = 'rgba(224,32,32,.30)';
+        ctx.fillRect(x * px, y * px, px, px);
+      }
+    }
+  }
+}
+
+// Dibuja el mapa en su lienzo al tamano que tenga puesto (248 o 992).
+function pintar(id) {
+  const f = fichas.get(id);
+  const m = mapas.get(id);
+  componer(m);
+  const ctx = f.ctx, lado = f.el.width;
+  ctx.imageSmoothingEnabled = lado < LLENO;   // suavizar solo al reducir
+  ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, lado, lado);
+  ctx.drawImage(lienzoAux, 0, 0, LLENO, LLENO, 0, 0, lado, lado);
+  superponer(ctx, m, lado / ANCHO);
+}
+
+// ---------------------------------------------------------------------------
+// Construccion del mundo
+// ---------------------------------------------------------------------------
+const fichas = new Map();            // id -> { el, ctx, marco, rotulo, gx, gy }
+const GW = mundoJson.anchoRejilla, GH = mundoJson.altoRejilla;
+mundo.style.width  = GW * LADO + 'px';
+mundo.style.height = GH * LADO + 'px';
+
+// Un tono por componente para que se lea de un vistazo que va junto con que.
+function tono(comp) {
+  if (comp === mundoJson.compPrincipal) return null;
+  return `hsl(${(comp * 47) % 360} 70% 60%)`;
+}
+
+const ids = [...mapas.keys()].filter((id) => disposicion[id]);
+for (const id of ids) {
+  const d = disposicion[id], m = mapas.get(id);
+  const el = document.createElement('canvas');
+  el.width = el.height = LADO;
+  el.style.cssText = `left:${d.gx * LADO}px;top:${d.gy * LADO}px;width:${LADO}px;height:${LADO}px`;
+  el.dataset.id = id;
+  mundo.appendChild(el);
+
+  const marco = document.createElement('div');
+  marco.className = 'marco' + (d.desplazado ? ' desp' : '');
+  marco.style.cssText = `left:${d.gx * LADO}px;top:${d.gy * LADO}px;width:${LADO}px;height:${LADO}px`;
+  const c = tono(d.comp);
+  if (c) marco.style.borderColor = c.replace(')', ' / .5)').replace('hsl(', 'hsl(');
+  mundo.appendChild(marco);
+
+  const rot = document.createElement('div');
+  rot.className = 'rotulo';
+  rot.innerHTML = `${m.nombre || '(sin nombre)'} <i>#${id}</i>`;
+  rot.style.cssText = `left:${d.gx * LADO + LADO / 2}px;top:${d.gy * LADO + 3}px`;
+  mundo.appendChild(rot);
+
+  fichas.set(id, { el, ctx: el.getContext('2d'), marco, rotulo: rot, gx: d.gx, gy: d.gy });
+}
+
+// Pintado inicial troceado, para no congelar la pestana 20 segundos.
+let hechos = 0;
+for (const id of ids) {
+  pintar(id);
+  if (++hechos % 12 === 0) {
+    paso(`Dibujando mapas... ${hechos}/${ids.length}`, 22 + (hechos / ids.length) * 78);
+    await new Promise((r) => setTimeout(r, 0));
+  }
+}
+$('#carga').classList.add('off');
+
+// ---------------------------------------------------------------------------
+// Camara
+// ---------------------------------------------------------------------------
+let z = 0.25, tx = 0, ty = 0;
+
+function aplicar() {
+  mundo.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`;
+  mundo.style.setProperty('--z', z);
+  $('#zoomTxt').textContent = Math.round(z * 100) + '%';
+  mundo.classList.toggle('sin-rotulos', !$('#cbNombres').checked || z < 0.18);
+  programarDetalle();
+}
+
+function encajar() {
+  const r = vista.getBoundingClientRect();
+  z = Math.min(r.width / (GW * LADO), r.height / (GH * LADO)) * 0.97;
+  tx = (r.width - GW * LADO * z) / 2;
+  ty = (r.height - GH * LADO * z) / 2;
+  aplicar();
+}
+
+function zoomA(nuevo, cx, cy) {
+  nuevo = Math.max(0.03, Math.min(4, nuevo));
+  const r = vista.getBoundingClientRect();
+  const px = (cx - r.left - tx) / z, py = (cy - r.top - ty) / z;
+  z = nuevo;
+  tx = cx - r.left - px * z;
+  ty = cy - r.top - py * z;
+  aplicar();
+}
+
+vista.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoomA(z * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX, e.clientY);
+}, { passive: false });
+
+let arrastre = null;
+vista.addEventListener('pointerdown', (e) => {
+  arrastre = { x: e.clientX, y: e.clientY, tx, ty, movido: false };
+  vista.setPointerCapture(e.pointerId);
+  vista.classList.add('arrastrando');
+});
+vista.addEventListener('pointermove', (e) => {
+  if (!arrastre) return;
+  const dx = e.clientX - arrastre.x, dy = e.clientY - arrastre.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) arrastre.movido = true;
+  tx = arrastre.tx + dx; ty = arrastre.ty + dy;
+  aplicar();
+});
+vista.addEventListener('pointerup', (e) => {
+  // Un clic que no arrastro es una seleccion de mapa.
+  if (arrastre && !arrastre.movido && e.target.dataset && e.target.dataset.id) {
+    seleccionar(+e.target.dataset.id);
+  }
+  arrastre = null;
+  vista.classList.remove('arrastrando');
+});
+
+$('#btMas').onclick   = () => { const r = vista.getBoundingClientRect();
+  zoomA(z * 1.3, r.left + r.width / 2, r.top + r.height / 2); };
+$('#btMenos').onclick = () => { const r = vista.getBoundingClientRect();
+  zoomA(z / 1.3, r.left + r.width / 2, r.top + r.height / 2); };
+$('#btAjustar').onclick = encajar;
+
+// ---------------------------------------------------------------------------
+// Detalle progresivo: los mapas visibles suben a 992 px cuando hay zoom
+// ---------------------------------------------------------------------------
+const enAlta = new Set();
+let pendiente = null;
+
+function programarDetalle() {
+  clearTimeout(pendiente);
+  pendiente = setTimeout(revisarDetalle, 130);
+}
+
+function revisarDetalle() {
+  if (z < DETALLE_DESDE) {
+    for (const id of enAlta) { const f = fichas.get(id); f.el.width = f.el.height = LADO; pintar(id); }
+    enAlta.clear();
+    return;
+  }
+  const r = vista.getBoundingClientRect();
+  const x0 = (-tx) / z, y0 = (-ty) / z;
+  const x1 = x0 + r.width / z, y1 = y0 + r.height / z;
+  const visibles = [];
+  for (const [id, f] of fichas) {
+    const mx = f.gx * LADO, my = f.gy * LADO;
+    if (mx + LADO > x0 && mx < x1 && my + LADO > y0 && my < y1) visibles.push(id);
+  }
+  for (const id of [...enAlta]) {
+    if (!visibles.includes(id)) {
+      const f = fichas.get(id); f.el.width = f.el.height = LADO; pintar(id); enAlta.delete(id);
+    }
+  }
+  for (const id of visibles.slice(0, DETALLE_MAX)) {
+    if (enAlta.has(id)) continue;
+    const f = fichas.get(id);
+    f.el.width = f.el.height = LLENO;
+    pintar(id);
+    enAlta.add(id);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ficha del mapa
+// ---------------------------------------------------------------------------
+let seleccionado = null;
+const nombreDe = (id) => (mapas.get(id)?.nombre || '(sin nombre)');
+
+function seleccionar(id) {
+  if (seleccionado) fichas.get(seleccionado)?.marco.classList.remove('sel');
+  seleccionado = id;
+  const f = fichas.get(id), m = mapas.get(id), d = disposicion[id];
+  f.marco.classList.add('sel');
+
+  $('#fNombre').textContent = nombreDe(id);
+  $('#fSub').textContent = `mapa #${id} · componente ${d.comp}` +
+    (d.comp === mundoJson.compPrincipal ? ' (continente)' : ` (${mundoJson.tamComp[d.comp]} mapas)`);
+
+  const npcs = m.npcs.filter((n) => n > 0);
+  $('#fDatos').innerHTML = `
+    <dt>Musica</dt><dd>${m.musica || '—'}</dd>
+    <dt>Interior</dt><dd>${m.indoors ? 'si' : 'no'}</dd>
+    <dt>Moral</dt><dd>${['normal', 'zona segura', 'combate'][m.moral] ?? m.moral}</dd>
+    <dt>NPCs</dt><dd>${npcs.length ? npcs.join(', ') : '—'}</dd>
+    <dt>Rejilla</dt><dd>${d.gx}, ${d.gy}${d.desplazado ? ' <span style="color:var(--rojo)">(desplazado)</span>' : ''}</dd>`;
+
+  const enlace = (n) => `<a data-ir="${n}">${nombreDe(n)} <i>#${n}</i></a>`;
+  const LADOS = { N: 'norte', S: 'sur', O: 'oeste', E: 'este' };
+  let html = '';
+  const vs = Object.entries(d.vecinos || {});
+  if (vs.length) {
+    html += '<h3>Contiguos</h3><ul>' +
+      vs.map(([k, v]) => `<li>${LADOS[k]}: ${enlace(v)}</li>`).join('') + '</ul>';
+  }
+  const ps = d.puertas || [];
+  if (ps.length) {
+    // Varias casillas suelen llevar al mismo sitio: se agrupan por destino.
+    const porDestino = new Map();
+    for (const [, , dest] of ps) porDestino.set(dest, (porDestino.get(dest) || 0) + 1);
+    html += `<h3>Puertas y teleports (${ps.length})</h3><ul>` +
+      [...porDestino].map(([dest, n]) =>
+        `<li>${enlace(dest)}${n > 1 ? ` <i style="color:var(--tenue)">×${n}</i>` : ''}</li>`).join('') +
+      '</ul>';
+  }
+  if (m.carteles.size) {
+    const textos = [];
+    for (const arr of m.carteles.values())
+      for (const t of arr) if (t && t.trim()) textos.push(t.trim());
+    if (textos.length) {
+      html += `<h3>Textos (${textos.length})</h3><ul>` +
+        textos.slice(0, 12).map((t) => `<li>${t.replace(/[<>&]/g, '')}</li>`).join('') + '</ul>';
+    }
+  }
+  $('#fResto').innerHTML = html;
+  $('#ficha').classList.add('on');
+}
+
+$('#fResto').addEventListener('click', (e) => {
+  const n = e.target.closest('[data-ir]');
+  if (n) irA(+n.dataset.ir);
+});
+$('#cerrar').onclick = () => {
+  $('#ficha').classList.remove('on');
+  if (seleccionado) fichas.get(seleccionado)?.marco.classList.remove('sel');
+  seleccionado = null;
+};
+
+function irA(id) {
+  const f = fichas.get(id);
+  if (!f) return;
+  const r = vista.getBoundingClientRect();
+  if (z < 0.6) z = 0.6;
+  tx = r.width / 2 - (f.gx * LADO + LADO / 2) * z;
+  ty = r.height / 2 - (f.gy * LADO + LADO / 2) * z;
+  aplicar();
+  seleccionar(id);
+}
+
+// ---------------------------------------------------------------------------
+// Buscador
+// ---------------------------------------------------------------------------
+$('#buscar').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  let primero = null;
+  for (const [id, f] of fichas) {
+    const hit = q.length > 0 &&
+      (String(id) === q || nombreDe(id).toLowerCase().includes(q));
+    f.rotulo.classList.toggle('hit', hit);
+    if (hit && primero === null) primero = id;
+  }
+  if (primero !== null && q.length >= 2) irA(primero);
+});
+$('#buscar').addEventListener('keydown', (e) => { if (e.key === 'Escape') e.target.blur(); });
+
+// ---------------------------------------------------------------------------
+// Interruptores
+// ---------------------------------------------------------------------------
+$('#cbNombres').onchange = aplicar;
+$('#cbComp').onchange = () => mundo.classList.toggle('ver-comp', $('#cbComp').checked);
+const repintarTodo = () => { for (const id of fichas.keys()) pintar(id); };
+$('#cbWarps').onchange = repintarTodo;
+$('#cbBloqueo').onchange = repintarTodo;
+
+// ---------------------------------------------------------------------------
+// Exportar el mundo entero a PNG
+// ---------------------------------------------------------------------------
+// A 4 px por casilla el mundo completo sale 3348x4340: se abre en cualquier
+// visor y se puede imprimir. A 8 px el lienzo pasa de 230 MB y toBlob falla en
+// algunos equipos, asi que no merece la pena.
+const PX_PNG = 4;
+
+$('#btPng').onclick = async () => {
+  const S = ANCHO * PX_PNG;
+  const lienzo = document.createElement('canvas');
+  lienzo.width = GW * S; lienzo.height = GH * S;
+  const g = lienzo.getContext('2d');
+  g.fillStyle = '#05070b';
+  g.fillRect(0, 0, lienzo.width, lienzo.height);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+
+  $('#carga').classList.remove('off');
+  let n = 0;
+  for (const [id, f] of fichas) {
+    componer(mapas.get(id));
+    g.drawImage(lienzoAux, 0, 0, LLENO, LLENO, f.gx * S, f.gy * S, S, S);
+    if (++n % 12 === 0) {
+      paso(`Exportando PNG... ${n}/${fichas.size}`, (n / fichas.size) * 100);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+  paso('Comprimiendo el PNG...', 100);
+  await new Promise((r) => setTimeout(r, 30));
+  lienzo.toBlob((b) => {
+    $('#carga').classList.add('off');
+    if (!b) { alert('El lienzo salio demasiado grande para este navegador.'); return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `dbo_mundo_${lienzo.width}x${lienzo.height}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }, 'image/png');
+};
+
+mundo.classList.add('ver-comp');
+addEventListener('resize', () => aplicar());
+encajar();
+</script>
+</body>
+</html>

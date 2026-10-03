@@ -1,0 +1,803 @@
+000a0392 888
+000a1700 pyrjhgfdsacvnvnsdinaoiwheoewyriusdyrflsdjncjkxzncisdughfusyfuapsipiuahfpaijnflkjnvjnuahguiryasbdlfkjblsahgfauygewuifaunfaur
+000a18a8 aoiuytrewqwuegeguigdfjkldsnoksamdihuehfidsuhdushdsisjsyayejrioehdoisahdjlasndowijapdnaidhaioshnksfnifohaifhaoinfiwnfinsaihfas
+000a19a8 asdfghjklzgoihwbdpiaugsdcapvhvinbudhbpidusbnvduisysayaspiufhpijsanfioasnpuvnupashuasohdaiofhaosifnvnuvnuahiosaodiubaota
+000a1aa0 45776543214619123425676749756722829121973794379467987945762347631462572792798792492416127957989742945642908
+000a2cf0 usestatpoint
+000a2d24 CONFIG
+000a2d38 Sound
+000a2d68 \config.ini
+000a2e48 SpeechBubbles
+000a2e68 NpcBar
+000a2e7c NPCDamage
+000a2e94 NPCName
+000a2ea8 PlayerBar
+000a2ec0 PlayerDamage
+000a2ee0 AutoScroll
+000a2efc PlayerName
+000a2f18 Music
+000a31ac GUILDLEAVE
+000a3258 :: Controles basicos ::
+000a33f4  - Usa las flechas de tu teclado para mover al personaje.
+000a346c  - Usa la tecla Shif para correr con el personaje.
+000a34d8  - Usa la tecla Ctrl para golpear a un enemigo.
+000a353c :: Comandos basicos del Juego ::
+000a3584  - Usa la tecla Insert para lanzar la magia elegida sin tener que usar el mouse .
+000a362c  - Usa las teclas F6 - F7 - F8 para restaurar puntos de HP - MP - SP respectivamente.
+000a36dc :: Para mas informacion visita www.dreamblueonline.com.ar ::
+000a3770  - Usa las teclas F11 - F12 para tomar fotografias del juego, con o sin la interfaz respectivamente
+000a383c  - Usa la tecla Fin Rotar el personaje sin la necesidad de moverse del lugar
+000a38dc :: Como usar magias ::
+000a3910 :: Como usar las tiendas ::
+000a395c  - El boton que tiene una letra R y se encuentra a la izquierda de la interfaz del juego, al pulsarlo refresca la pantalla y sirve para cuando nos quedamos pegados por lag o queremos agarrar un objeto y no podemos, etc., o sea cuando tengas un problema de este tipo o grafico no dudes en pulsar este boton.
+000a3bc8 Arriba del cuadro donde escribes te salen diferentes nombres como Inventario - Equipo - Magias - etc. En primer lugar ve a tu inventario y aprende la magia dandole doble clik en el items, luego ve al apartado Magias y le haces 2 click sobre la magia que desees utilizar, ya tenemos el primer paso, ahora seleccione a que criatura o persona quieres atacar, para esto haces 2 click sobre el blanco ya sea oponente o criatura , y el ultimo paso es lanzar la magia y esto lo haces con el bot
+000a3f98 n Insert que se ubica al lado de enter a mano derecha por encima de Supr (Suprimir)
+000a4044 Te colocas en frente del NPC o vendedor y se te abrir
+000a40b0  autom
+000a40be ticamente una ventana de comercio, te saldran diferentes items y secciones, ya sea Armadura, Cascos, Magias, Armas, Otros. Cuando tengas lista tu elecci
+000a41f0 n de compra haces 1 solo click sobre el item que desees comprar y mas abajo busca donde dice Comerciar, ahora si quieres Vender tus items, pulsas en Otros, ahi te saldran muchas secciones con dorados y cada una es para vender un item diferente, ahi buscas el item que desees vender, lo seleccionas y pones Comerciar, y ya has vendido tu item. Recuerda que en el apartado Otros tambien podras comprar Items que no se encuentran en los otros apartados, como posiones, etc.
+000a45a4  - Para mandar un mensaje privado Tipea ! !nombre del jugador Texto aqui. Ejemplo: !Totis Hola!
+000a4668  - Para mandar un mensaje a los miembros de tu clan Tipea % %Texto aqui. Ejemplo: %Hola como estan!
+000a4734  - Tipea /guardar para guardar tu juego. 
+000a4794  - Tipea /estadisticas para ver las estadisticas de tu personaje. 
+000a4820  - Tipea /gm para llamar a un administrador.
+000a4880  - Tipea /inventario para acceder al inventario del jugador. 
+000a4900  - Tipea /online para ver los jugadores que est
+000a4960 n Online. 
+000a497c  - Tipea /fps para mostrar a cuantos fps esta corriendo el juego.
+000a4a04  - Tipea /ausente o /regresar para mostrar que te encuentras ausente o regresar del estado ausente.
+000a4ad0 :: Chat Privado ::
+000a4afc getstats
+000a4b14 spells
+000a4b5c Para enviar una invitacion de chat privado a un jugador, has clic en el jugador o seleccionalo desde el men
+000a4c34  del juego Online y luego presiona el boton Chat.
+000a4c9c :: Comercio entre jugadores ::
+000a4ce0 playerchat
+000a4cfc writeprofile
+000a4d1c salir.wav
+000a4d44 Para enviar una invitacion de comercio a un jugador escribe: /comerciar (nombre del jugador aqui) Para aceptar una invitacion de un jugador para comerciar escribe: /sicomerciar.
+000a4eac :: Reglas de Dream Blue Online ::
+000a4f34  - No faltarle el respeto a otro jugador ni hablarle de forma despectiva, racial etc.., no hara falta llegar al insulto para ser castigado un jugador y las penas seran duras.
+000a5098  - Robar el droop de un npc al jugador que lo halla eliminado.
+000a5128  - Hablar Vulgarmente. (Recordemos que se trata de un juego de rol, usemos un vocabulario apropiado).
+000a51f8  - Esta totalmente prohibido el flood en el chat del juego, esto incluye invitaciones de chat desmedidas, etc.
+000a52dc  - Curar a un enemigo.
+000a5318  - Sera borrada toda cuenta o nombre de Personaje que sea de caracter ofensivo, insultante o de mal gusto.
+000a53f4  - Aunque este permitido matar, abusar del PK esta penado con duras condenas.
+000a5494  - Robar el Npc a otro jugador.
+000a5500  - Robar items del suelo cuando dos jugadores estan comerciando.
+000a5588  - Bloquear entradas y salidas.
+000a55cc  - Sacar ventaja de algun bug en el juego.
+000a5628  - No responderle a un GM cuando un usuario se encuentra parado y entrenando.
+000a56e8  - Hablar de otros juegos y engines fuera del chat privado
+000a5764  - Pasarse Items a PJ de una misma cuenta, esto sera castigado con la eliminacion de la misma cuenta
+000a5834 solo usuarios administradores pueden visitar esta seccion!
+000a58b0 Proximamente
+000a58d0  - El usuario que se cambie el rango y/o expulse a alguien de un clan sin el consentimiento de los jefes de dicho clan sera castigado si el clan lo denuncia.
+000a5a10 :: Informacion para Administradores ::
+000a5a64 GUILDMEMBER
+000a5a90 \GUI\Game
+000a5ab8 No tienes acceso suficiente para realizar esta accion!.
+000a5b3c refresh
+000a5b60 .gif
+000a5b70 .jpg
+000a5b80 .png
+000a5b90 GUI\Game
+000a5c74 La magia se ha memorizado!
+000a5cb0 Elige una magia aprendida.
+000a5d38  (Equipado)
+000a5d54  Fuerza
+000a5d68  Defensa
+000a5d80  Inteligencia
+000a5da0 HP: 
+000a5db0  MP: 
+000a5dc0  SP: 
+000a5dd0 Fuerza: 
+000a5de8  Defensa: 
+000a5e04 Magia: 
+000a5e2c  Inteligencia: 
+000a5e50 Restauras puntos de vida, te sientes mas fuerte!
+000a5eb8 No tienes ningun item que restaure puntos de vida!
+000a5f24 Restauras puntos de mana!
+000a5f5c No tienes ningun item que restaure puntos de mana!
+000a5fc8 Restauras puntos de SP
+000a6008 No tienes ningun item que restaure puntos de SP!
+000a6230 cast
+000a6240 No puedes lanzar la magia al caminar!
+000a67dc Screenshot
+000a67f8 .bmp
+000a6808 \Screenshot
+000a6824 Map Editor - 
+000a6844 X: 
+000a6850  Y: 
+000a6994 Lineas de texto guardadas: 
+000a69e0 GUILDTRAINEE
+000a6ae4 Cantidad de 
+000a6b0c ) Que cantidad vas a arrojar?
+000a6b4c No tienes esa cantidad para arrojar!
+000a6b9c trade
+000a6bac GUILDCHANGEACCESS
+000a6bd4 GUILDDISOWN
+000a6fd0 GUI\MainMenu
+000a6ff0 \GUI\MainMenu
+000a7010 Online
+000a7024 Offline
+000a704c Title.mid
+000a710c Estas a punto de borrar tu cuenta, quieres continuar?
+000a71d4 Account
+000a7228 Password
+000a729c GUI\NewAccount
+000a72c0 \GUI\NewAccount
+000a72e4 GUI\DeleteAccount
+000a730c \GUI\DeleteAccount
+000a7344 Tu nombre y contrase
+000a736e a tienen que tener tres caracteres de largo como minimo
+000a7444 GUI\Login
+000a745c \GUI\Login
+000a74c4 Cargando...
+000a74e0 \Maps
+000a74f0 maps
+000a7500 \GFX
+000a7510 GFX
+000a751c \Music
+000a7530 MUSIC
+000a7540 \SFX
+000a7550 SFX
+000a755c \Flashs
+000a7570 FLASHS
+000a7584 config.ini
+000a75a0 MapGrid
+000a75c4 UPDATER
+000a75d8 FileName
+000a75f0 Dream Blue Online.exe
+000a7620 WebSite
+000a7634 IPCONFIG
+000a7658 127.0.0.1
+000a7670 PORT
+000a7680 \GFX\items.DBO
+000a76a4 \GFX\sprites.DBO
+000a7760 Iniciando TCP...
+000a7788 Conectando con el servidor...
+000a77c8 Espere por favor...
+000a77f4 Conectando...
+000a7950 El server esta apagado, volve a intentarlo mas tarde
+000a79c0 Fixedsys
+000a7a7c NPC
+000a7a90 Bank
+000a7aa8 Cargando mapa...
+000a7b18 Destruyendo datos del juego...
+000a7b5c Gracias por jugar a  
+000a7b94 The Sign Reads:
+000a7bd8 Usar: !Nombre del jugador mensaje
+000a7c20 /online
+000a7c34 /fps
+000a7c48 FPS: 
+000a7c58 /inventario
+000a7c74 /estadisticas
+000a7c94 /nochat
+000a7ca8 dchat
+000a7cb8 /sichat
+000a7ccc achat
+000a7cdc /comerciar
+000a7cf8 Usar: /comerciar Nombre del jugador aqui
+000a7d50 /sicomerciar
+000a7d70 /nocomerciar
+000a7d90 /daynight
+000a7da8 /info
+000a7db8 playerinforequest
+000a7de0 /weather
+000a7e08 weather
+000a7e1c none
+000a7e2c rain
+000a7e3c snow
+000a7e4c thunder
+000a7e60 /kick
+000a7e78 /loc
+000a7e88 /mapeditor
+000a7ea4 /mapreport
+000a7ec0 mapreport
+000a7ed8 /setsprite
+000a7ef4 /setplayersprite
+000a7f1c /respawn
+000a7f34 /motd
+000a7f44 /banlist
+000a7f5c /ban
+000a7f6c /edititem
+000a7f84 /editemoticon
+000a7fb0 /editarrow
+000a7fcc /editnpc
+000a7fe4 /editshop
+000a7ffc /editspell
+000a8018 /setaccess
+000a8034 /destroybanlist
+000a8060 checkemoticons
+000a8084 checkcommands
+000a80a4 mapgetitem
+000a80c0 attack
+000a8154  (Equip)
+000a816c > Vacio
+000a8320 \GFX\tiles0.DBO
+000a8344 Are you sure you wish to clear the ground layer?
+000a83ac Are you sure you wish to clear the mask layer?
+000a8410 Are you sure you wish to clear the animation layer?
+000a849c Are you sure you wish to clear the mask 2 layer?
+000a8504 Are you sure you wish to clear the mask 2 animation layer?
+000a8580 Are you sure you wish to clear the fringe layer?
+000a85e8 Are you sure you wish to clear the fringe animation layer?
+000a867c Are you sure you wish to clear the fringe 2 layer?
+000a86e8 Are you sure you wish to clear the fringe 2 animation layer?
+000a8768 Are you sure you wish to clear the attributes on this map?
+000a8854 \GFX\emoticons.DBO
+000a88fc \GFX\arrows.DBO
+000a8bcc None
+000a8e3c  for 
+000a8e4c Empty Trade Slot
+000a8e84 All Classes
+000a9034 <Vacio>
+000a9048 search
+000a9078 GmTime
+000a92f8 -debug
+000a9358  Perfil
+000a936c yes
+000a9378 ((( Processed Packet 
+000a93a8  )))
+000a93b8 maxinfo
+000a93cc itemworn
+000a93e4 npchp
+000a93f4 attributenpchp
+000a9418 alertmsg
+000a9430 plainmsg
+000a9448 allchars
+000a9460 Vacio
+000a9470  nivel 
+000a9484 loginok
+000a9498 Cargando datos del juego...
+000a94d4 profile
+000a94e8 Estado: Tu Perfil
+000a9510 Estado: 
+000a9528 newcharclasses
+000a954c classesdata
+000a9568 ingame
+000a957c here
+000a958c playerinv
+000a95a4 playerinvupdate
+000a95c8 playerworneq
+000a95e8 playerbank
+000a9604 playerbankupdate
+000a962c openbank
+000a9644 bankmsg
+000a9658 playerpoints
+000a9678 playerhp
+000a9690  / 
+000a969c playermp
+000a96b4 mapmsg2
+000a96c8 playersp
+000a96e4 playerstatspacket
+000a970c  (+
+000a9718 playerdata
+000a9734 playermove
+000a9750 npcmove
+000a9764 attributenpcmove
+000a978c playerdir
+000a97a4 npcdir
+000a97b8 attributenpcdir
+000a97dc playerxy
+000a97f4 npcattack
+000a980c attributenpcattack
+000a9838 checkformap
+000a9854 maps\map
+000a986c .dat
+000a987c needmap
+000a98a0 mapdata
+000a9a08 mapitemdata
+000a9a28 mapnpcdata
+000a9a44 mapattributenpcdata
+000a9a70 mapdone
+000a9a84 saymsg
+000a9a98 broadcastmsg
+000a9ab8 globalmsg
+000a9ad0 playermsg
+000a9ae8 mapmsg
+000a9afc adminmsg
+000a9b14 spawnitem
+000a9b2c itemeditor
+000a9b94 updateitem
+000a9bb0 edititem
+000a9bc8 time
+000a9bdc spawnnpc
+000a9bf4 spawnattributenpc
+000a9c1c npcdead
+000a9c30 attributenpcdead
+000a9c58 npceditor
+000a9c70 updatenpc
+000a9c88 editnpc
+000a9c9c mapkey
+000a9cb0 editmap
+000a9cc4 shopeditor
+000a9ce0 updateshop
+000a9cfc editshop
+000a9d14 spelleditor
+000a9d30 updatespell
+000a9d4c editspell
+000a9d64 <vacio>
+000a9d78 highindex
+000a9d90 onlinelist
+000a9dac blitplayerdmg
+000a9dcc blitnpcdmg
+000a9de8 pptrading
+000a9e00 : <Vacio>
+000a9e18 qtrade
+000a9e2c updatetradeitem
+000a9e50 trading
+000a9e64 ppchatting
+000a9ec8 Chateando con: 
+000a9eec qchat
+000a9efc sendchat
+000a9f14 sound
+000a9f24 sword.wav
+000a9f3c critical
+000a9f54 critical.wav
+000a9f74 miss
+000a9f84 miss.wav
+000a9f9c key
+000a9fa8 key.wav
+000a9fbc magic
+000a9fcc .wav
+000a9fdc warp
+000a9fec warp.wav
+000aa004 pain
+000aa014 pain.wav
+000aa02c soundattribute
+000aa050 spritechange
+000aa070 Quieres cambiar de apariencia?
+000aa0b4 Apariencias
+000aa0d0 buysprite
+000aa0e8 changedir
+000aa100 flashevent
+000aa11c http://
+000aa214 Flashs\
+000aa228 \Flashs\
+000aa240 prompt
+000aa254 emoticoneditor
+000aa278 updateemoticon
+000aa29c editemoticon
+000aa2bc arroweditor
+000aa2d8 updatearrow
+000aa2f4 editarrow
+000aa30c checkarrows
+000aa340 checksprite
+000aa39c El clima varia muy seguido en el mundo exterior!.
+000aa404 La noche cae oscura y tenebrosa.
+000aa44c spellanim
+000aa464 levelup
+000aa478 level.wav
+000aa490 damagedisplay
+000aa4b0 itembreak
+000aa4c8 newfaccountied
+000aa4ec delimaccounted
+000aa510 logination
+000aa52c addachara
+000aa544 delimbocharu
+000aa564 gatglasses
+000aa580 usagakarim
+000aa59c guildmsg
+000aa5b4 emotemsg
+000aa5cc requestnewmap
+000aa5ec MAPDATA
+000aa600 WARPMETO
+000aa618 WARPTOME
+000aa630 WARPTO
+000aa644 SETACCESS
+000aa65c SETSPRITE
+000aa674 KICKPLAYER
+000aa690 BANPLAYER
+000aa6a8 BANLIST
+000aa6bc REQUESTEDITITEM
+000aa6e0 SAVEITEM
+000aa6f8 REQUESTEDITEMOTICON
+000aa724 SAVEEMOTICON
+000aa744 REQUESTEDITARROW
+000aa76c SAVEARROW
+000aa784 REQUESTEDITNPC
+000aa7a8 SAVENPC
+000aa7bc MAPRESPAWN
+000aa7d8 USEITEM
+000aa7ec MAPDROPITEM
+000aa808 WHOSONLINE
+000aa824 ONLINELIST
+000aa840 SETMOTD
+000aa854 REQUESTEDITSHOP
+000aa878 SAVESHOP
+000aa890 REQUESTEDITSPELL
+000aa8b8 SAVESPELL
+000aa8d0 REQUESTEDITMAP
+000aa8f4 PPTRADE
+000aa908 ATRADE
+000aa91c DTRADE
+000aa930 PARTY
+000aa940 JOINPARTY
+000aa958 LEAVEPARTY
+000aa974 BANDESTROY
+000aa994 REQUESTLOCATION
+000aa9b8 SETPLAYERSPRITE
+000aaa28 GUI\Credits
+000aaa44 \GUI\Credits
+000aaa64 GUI\CharacterSelect
+000aaa90 \GUI\CharacterSelect
+000aaac0 Ya existe un personaje!
+000aaaf4 No existe un  personaje!
+000aab2c No existe un personaje!
+000aab60 Estas seguro que quieres borrar tu personaje?
+000aabc0 Character name must be at least three characters in length.
+000aac3c No puedes utilizar signos en tu nombre
+000aac90 GUI\NewCharacter
+000aacb8 \GUI\NewCharacter
+000aace0 GUI\Loading
+000aacfc \GUI\Loading
+000aad2c \GFX\bigsprites.DBO
+000aad58 Damage :
+000aad70 Defensa :
+000aad88 Your missing some graphic files!
+000aadd0 \GFX\tiles
+000aadec .DBO
+000aadfc \GFX\spells.DBO
+000aae20 123
+000aae2c Thunder.wav
+000aae48 arrowhit
+000aae7c \Music\
+000aae90 No NPC
+000aaeb0 0 - Anyone
+000aaecc 1 - Moniters
+000aaeec 2 - Mappers
+000aaf08 3 - Developers
+000aaf2c 4 - Admins
+000aaf48  Milleseconds
+000aaf68  - 
+000aaf74 Ind.
+000aaf84 EDITITEM
+000aaf9c EDITNPC
+000aafb0 EDITSHOP
+000aafc8 EDITSPELL
+000aafe0 EDITEMOTICON
+000ab000 EDITARROW
+000ab064 \debug.txt
+000ab080 debug.txt
+000ab0a0 \maps\map
+000ab160 *.*
+000ab16c .mid
+000ab2e0 close all
+000ab2f8 open "
+000ab30c " type sequencer alias background
+000ab354 play background notify
+000ab388 STATUS background MODE
+000ab3bc stopped
+000ab3d0 PLAY background FROM 0
+000ab404 SFX\
+000ab414 \SFX\
+000ab43c GUI\FixItems
+000ab45c \GUI\FixItems
+000ab47c Please click the tab that says shield to add this!
+000ab4e8 Please click the tab that says armor to add this!
+000ab550 Please click the tab that says helmet to add this!
+000ab5bc Please click the tab that says spell to add this!
+000ab624 Please click the tab that says other to add this!
+000ab68c Please click the tab that says weapon to add this!
+000ab6f4 Visible
+000ab708 GUI\Shop
+000ab720 \GUI\Shop
+000ab738 traderequest
+000ab7bc fixitem
+000ab7d0 God's Only Spell
+000ab7f8 No Sound
+000ab810 Anim: 
+000ab824 Times
+000ab834 Time
+000ab844 Cycle Animation 
+000ab86c Time: 
+000ab8d4 GUI\Notes
+000ab8ec \GUI\Notes
+000ab908 \notes.txt
+000ab92c You are not authorized to carry out that action
+000ab99c GUI\IPConfig
+000ab9bc \GUI\IPConfig
+000ab9dc Por favor ingrese la IP!
+000aba14 Por favor ingrese el puerto!
+000aba54 MAKEGUILD
+000aba6c GUI\CreateGuild
+000aba90 \GUI\CreateGuild
+000abb74 swapitems
+000abb8c El comercio fue un exito!
+000abbc4 No puedes negociar este items mas de una vez!
+000abc24 Intro.mid
+000abc3c No puedes comerciar items acumulativos!
+000abc90 No puedes comerciar un item equipado!
+000abce0  **
+000abcec updatetradeinv
+000abd10 No hay un item para remover!
+000abd50 GUI\Trade
+000abd68 \GUI\Trade
+000abdc4 GUI\Player Chat
+000abe04 \GUI\Player Chat
+000abe3c No Cost
+000abf1c  - None
+000abf70 \Flashs\Intro.swf
+000abf98 No puedes abrir dos clientes!
+000abfd8 Informe DBO
+000ac034 There already is a 
+000ac060  command!
+000ac078 Are you sure you want to discard your changes?
+000ac0dc Are you sure you want to fill the map?
+000ac130 Are you sure you want to make these changes?
+000ac190 \GFX\Tiles
+000ac1ac Arrow: 
+000ac1c0 Range: 
+000ac214 NPC Number: 
+000ac234 NPC Amount: 
+000ac254 Spawn Range By Tile: 
+000ac2a4 Tienes 
+000ac2b8 ) Que cantidad quieres depositar?
+000ac300 Deposit 
+000ac318 bankdeposit
+000ac334 Cantidad no permitida!
+000ac368 ) Que cantidad quieres retirar?
+000ac3ac bankwithdraw
+000ac45b 1&'
+000ac551 1&'(.
+000ac65d 1&'(
+000ac7d2 Edit Choice
+000ac8a1 1&'
+000acb0c 1&'(
+000acbc7 Set Sound
+000acbfd cmdOk
+000acc2f cmdCancel
+000acc69 lstSound
+000acdcc 1&'(
+000ace87 Set Shop
+000acebb Label1
+000aceef lblNum
+000acf23 cmdOk
+000acf55 cmdCancel
+000acf8f scrlNum
+000ad167 1&'(
+000ad222 Set Script
+000ad25a lblScript
+000ad294 Label1
+000ad2c8 cmdCancel
+000ad302 cmdOk
+000ad334 scrlScript
+000ad50e 1&'(
+000ad5c9 Set Sign
+000ad5fd Label3
+000ad631 Label1
+000ad665 Label2
+000ad699 cmdOk
+000ad6cb cmdCancel
+000ad705 Line1
+000ad737 Line2
+000ad769 Line3
+000ad9c2 1&'(
+000ada7d Set Notice
+000adab5 Label2
+000adae9 Label1
+000adb1d Label3
+000adb51 Text
+000adb81 Title
+000adbb3 cmdCancel
+000adbed cmdOk
+000adc1f lstSound
+000ade81 1&'(
+000adf4d Info
+000adf79 Label2
+000adfad lblItem
+000adfe3 Label1
+000ae017 lblName
+000ae04d chkTake
+000ae083 scrlItem
+000ae0bb cmdOk
+000ae0ed cmdCancel
+000ae381 1&'(
+000ae43c Set Class
+000ae472 Label1
+000ae4a6 lblClass
+000ae4de Label2
+000ae512 lblReqClass
+000ae550 scrlClass
+000ae58a cmdOk
+000ae5bc cmdCancel
+000ae5f6 scrlReqClass
+000aedbf 1&'(
+000aee7c Warp To..
+000aeeb2 Label1
+000aeee6 Label2
+000aef1a Label3
+000aef4e lblX
+000aef7e lblY
+000aefae scrlX
+000aefe0 scrlY
+000af012 cmdOk
+000af044 cmdCancel
+000af07e txtMap
+000af341 1&'(
+000af41c Edit Emoction
+000af45a Label5
+000af48e lblEmoticon
+000af4cc Label1
+000af500 Picture1
+000af538 scrlEmoticon
+000af578 txtCommand
+000af5b4 cmdOk
+000af5e6 Command1
+000af8cb 1&'(
+000af999 Set X/Y
+000af9cb lblY
+000af9fb lblX
+000afa2b Label2
+000afa5f Label1
+000afa93 Label3
+000afac7 cmdCancel
+000afb01 cmdOk
+000afb33 scrlY
+000afb65 scrlX
+000afb97 txtMsg
+000afe76 1&'(
+000aff31 Edit Arrow
+000aff69 lblRange
+000affa1 lblArrow
+000affd9 Label1
+000b000d Command1
+000b0045 cmdOk
+000b0077 scrlArrow
+000b00b1 Picture1
+000b00e9 scrlRange
+000b0123 txtName
+000b0433 1&'(
+000b04ff Set Item
+000b0533 lblName
+000b0569 Label1
+000b059d lblValue
+000b05d5 lblItem
+000b060b Label3
+000b063f Label2
+000b0673 cmdCancel
+000b06ad cmdOk
+000b06df scrlValue
+000b0719 scrlItem
+000b09f4 1&'(
+000b0aaf Set Spawn
+000b0ae5 lblNum3
+000b0b1b lblNum2
+000b0b51 Label3
+000b0b85 Label2
+000b0bb9 Label1
+000b0bed lblNum1
+000b0c23 scrlNum3
+000b0c5b scrlNum2
+000b0c93 cmdOk
+000b0cc5 cmdCancel
+000b0cff scrlNum1
+000b0ff5 1&'(
+000b10b0 Set Allow
+000b10e6 lblNum1
+000b111c Label1
+000b1150 Label2
+000b1184 Label3
+000b11b8 lblNum2
+000b11ee lblNum3
+000b1224 scrlNum1
+000b125c cmdCancel
+000b1296 cmdOk
+000b12c8 scrlNum2
+000b1300 scrlNum3
+000b1627 1&'(
+000b1713 Set Sprite
+000b174b lblSprite
+000b1785 Label1
+000b17b9 Label2
+000b17ed lblCost
+000b1823 Label3
+000b1857 lblItem
+000b188d scrlSprite
+000b18c9 cmdCancel
+000b1903 cmdOk
+000b1935 scrlCost
+000b196d scrlItem
+000b19a5 picSprite
+000b1ce0 1&'(
+000b2597 n&'
+000b2d75 Menu
+000b2da1 Label5
+000b2dd5 Line1
+000b2f11 1&'(
+000b2fdf Weapon
+000b300f lstTradeItem(0)
+000b3055 Shield
+000b3085 lstTradeItem(1)
+000b30cb Armor
+000b30f9 lstTradeItem(2)
+000b313f Helmet
+000b316f lstTradeItem(3)
+000b31b5 Spell
+000b31e3 lstTradeItem(4)
+000b3229 Others
+000b3259 lstTradeItem(5)
+000b3f89 1&'(25
+000b466b 1&'(
+000b53cd 1&'(
+000b54bb Spell
+000b54e9 lblSound
+000b5521 Label8
+000b5555 Label4
+000b5589 lblVitalMod
+000b55c7 Label7
+000b55fb Label2
+000b562f lblRange
+000b5667 lblSpellAnim
+000b56a7 lblSpellTime
+000b56e7 lblSpellDone
+000b5727 chkArea
+000b575d info
+000b578d Frame1
+000b57c1 scrlSound
+000b57fb scrlVitalMod
+000b583b cmbType
+000b5871 cmdCancel
+000b58ab cmdOk
+000b58dd scrlRange
+000b5917 scrlSpellAnim
+000b5959 scrlSpellTime
+000b599b scrlSpellDone
+000b59dd picSpell
+000b5a15 Command1
+000b5ab3 c$;
+000b62f5 1&'(
+000b6d60 Edit Item
+000b6d96 Label5
+000b6dca Label1
+000b6dfe Label26
+000b6e34 Picture1
+000b6e6c VScroll1
+000b6ea4 fraAttributes
+000b6ee6 txtDesc
+000b6f1c fraBow
+000b8fa5 1&'(
+000b909f 1&'(
+000b916d General
+000b919f Label13
+000b91d5 txtName
+000b920b Frame1
+000b923f Frame2
+000b9273 Frame3
+000b92a7 Frame4
+000b92db cmdOk
+000b930d cmdCancel
+000b9347 NPC'S
+000b9375 Copy(9)
+000b93ab Copy(13)
+000b93e3 Copy(12)
+000b941b Copy(11)
+000b9453 Copy(10)
+000b948b Copy(8)
+000b94c1 Copy(7)
+000b94f7 Copy(6)
+000b952d Copy(5)
+000b9563 Copy(4)
+000b9599 Copy(3)
+000b95cf Copy(2)
+000b9605 Copy(1)
+000b963b Copy(0)
+000b9671 Command1
+000b96a9 cmbNpc(0)
+000b96e3 cmbNpc(1)
+000b971d cmbNpc(2)
+000b9757 cmbNpc(3)
+000b9791 cmbNpc(4)
+000b97cb cmbNpc(5)
+000b9805 cmbNpc(6)
+000b983f cmbNpc(7)
+000b9879 cmbNpc(8)
+000b98b3 cmbNpc(9)
+000b98ed cmbNpc(10)
+000b9929 cmbNpc(11)
+000b9965 cmbNpc(12)
+000b99a1 cmbNpc(13)
+000b99dd cmbNpc(14)

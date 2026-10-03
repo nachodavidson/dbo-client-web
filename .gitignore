@@ -1,0 +1,26 @@
+# Lista BLANCA: fuera todo, y se vuelve a meter solo lo nuestro.
+#
+# La carpeta de trabajo tiene 914 MB: el cliente original, el motor de
+# Dreaminze, un instalador de Flash de 388 MB, los assets en crudo y -- lo
+# importante -- las CUENTAS, que guardan las contrasenas en texto plano.
+# Con una lista negra tarde o temprano se cuela algo de eso.
+/*
+
+!/.gitignore
+!/README.md
+!/_web/
+!/_servicios/
+
+# --- dentro de lo nuestro, lo que tampoco va ---
+__pycache__/
+*.pyc
+
+# registro del adaptador: se regenera en cada arranque y puede traer
+# nombres de cuenta
+_servicios/adapter_log.txt
+
+# imagenes sueltas de diagnostico que quedaron de las pruebas
+_web/check_map32.png
+_web/check_sprite.png
+_web/frames.png
+_web/gusana.png

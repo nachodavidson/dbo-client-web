@@ -1,0 +1,426 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Dream Blue Online</title>
+<style>
+  /* La interfaz ES la del cliente: `assets/ui/juego.png` (950x660, sacada del
+     ejecutable). Todo lo de encima esta colocado en coordenadas medidas sobre
+     esa misma imagen y sobre capturas del cliente corriendo.
+
+     Distribucion del original, que no es la evidente:
+       - la franja negra de abajo es SIEMPRE el chat
+       - las pestanas cambian lo que se ve en el RECUADRO DEL DRAGON (izquierda)
+       - Clanes y Opciones abren ventanas flotantes sobre el mapa            */
+  :root { color-scheme: dark; --oro: #e8c86a; --texto: #e6dcc6; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: #07070a; color: var(--texto); overflow: hidden;
+    font: 12px/1.3 Verdana, Geneva, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #escala { transform-origin: center center; }
+  #juego {
+    position: relative; width: 950px; height: 660px;
+    background: url("assets/ui/juego.png") no-repeat 0 0;
+  }
+  .zona { position: absolute; cursor: pointer; }
+
+  canvas#pantalla {
+    position: absolute; left: 281px; top: 28px; width: 642px; height: 470px;
+    display: block; image-rendering: pixelated; background: #000;
+  }
+
+  /* --- barras: el relleno es de color macizo, como en el cliente, y el
+         numero va ARRIBA, en la fila de la etiqueta --- */
+  .barra { position: absolute; left: 90px; width: 126px; height: 10px; overflow: hidden; }
+  .barra i { display: block; height: 100%; width: 0; transition: width .18s; }
+  .cifra {
+    position: absolute; left: 96px; width: 120px; text-align: center;
+    font: 11px/12px Verdana, sans-serif; color: #f2ead6; text-shadow: 0 1px 1px #000;
+  }
+  #b-hp { top: 57px; }  #b-mp { top: 97px; }
+  #b-sp { top: 137px; } #b-lv { top: 177px; }
+  #n-hp { top: 40px; }  #n-mp { top: 80px; }
+  #n-sp { top: 120px; } #n-lv { top: 160px; }
+  #b-hp i { background: #1fc41f; }
+  #b-mp i { background: #2b34d8; }
+  #b-sp i { background: #d8d022; }
+  #b-lv i { background: #cc1d1d; }
+
+  /* --- estadisticas --- */
+  .valor { position: absolute; font: 13px Georgia, serif; color: #f0e4c4; text-shadow: 0 1px 0 #000; }
+  .valor.der { width: 80px; text-align: right; left: 120px; }
+  .valor.izq { left: 130px; }
+  .mas {
+    position: absolute; left: 103px; width: 16px; height: 16px; padding: 0;
+    border: 0; background: transparent; color: #3ad83a; cursor: pointer;
+    font: bold 15px/15px Verdana, sans-serif; display: none;
+  }
+  .mas:hover { color: #9cff9c; }
+  .botoncito {
+    position: absolute; left: 241px; width: 22px; height: 22px; padding: 0;
+    background: #d8d0c0; color: #401010; border: 2px outset #f0e8d8;
+    font: bold 12px/16px Verdana, sans-serif; cursor: pointer;
+  }
+  #b-ayuda { top: 241px; } #b-refrescar { top: 281px; }
+  #st-raza { left: 78px; top: 404px; color: #4ce04c; font: 12px Georgia, serif; }
+
+  /* --- pestanas: solo la zona pulsable, el texto ya esta en la imagen --- */
+  .pestana { top: 498px; width: 88px; height: 31px; }
+  .pestana.activa { box-shadow: inset 0 0 0 1px rgba(232,200,106,.6); }
+
+  /* --- el recuadro del dragon es el hueco de los paneles --- */
+  #caja { position: absolute; left: 63px; top: 423px; width: 181px; height: 183px; }
+  /* El rojo es el mismo del recuadro del dragon, muestreado de la imagen. */
+  .hoja { display: none; width: 100%; height: 100%; background: #750b0b; }
+  .hoja[data-panel="equipo"] { background: none; }
+  .hoja.visible { display: block; }
+  #cv-inv { image-rendering: pixelated; cursor: pointer; display: block; margin: 4px 0 0 11px; }
+  /* globo de estadisticas del objeto, como el del cliente */
+  #globo {
+    position: absolute; display: none; z-index: 8; min-width: 190px;
+    background: #000; border: 1px solid #5a4a20; padding: 3px 8px 5px;
+    font: 11px/14px Verdana, sans-serif; color: #fff; text-align: center;
+    pointer-events: none; white-space: nowrap;
+  }
+  #globo.visible { display: block; }
+  #globo .tit { color: #e8a030; }
+  #globo .cab { color: #e8a030; }
+  .botonera { position: absolute; left: 0; bottom: 0; width: 100%; display: flex; gap: 2px; padding: 0 3px; }
+  .botonera button {
+    flex: 1; background: #d8d0c0; color: #401010; border: 2px outset #f0e8d8;
+    font: 9px/11px Verdana, sans-serif; padding: 1px 0; cursor: pointer;
+  }
+  .botonera button:active { border-style: inset; }
+  .botonera .flecha { flex: 0 0 22px; }
+  /* las listas del cliente son cuadros de VB6: fondo crema y texto oscuro */
+  .listavb {
+    position: absolute; left: 4px; top: 4px; right: 4px; bottom: 20px;
+    background: #ffffcc; color: #101010; border: 2px inset #b8b0a0;
+    overflow-y: auto; font: 11px/14px 'MS Sans Serif', Verdana, sans-serif; padding: 1px;
+  }
+  .listavb div { padding: 0 3px; cursor: pointer; }
+  .listavb div.sel { background: #000080; color: #fff; }
+
+  /* --- el chat vive siempre en la franja de abajo --- */
+  #chatzona { position: absolute; left: 285px; top: 529px; width: 636px; height: 103px; }
+  #chatlog {
+    position: absolute; inset: 0 0 18px 0; overflow-y: auto;
+    font: 11px/13px Verdana, sans-serif; padding: 3px 6px;
+  }
+  #chatlog div { padding: 0 0 1px; }
+  #entrada {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 18px;
+    background: #0c0c10; color: var(--texto); border: 1px solid #3a2e18;
+    padding: 1px 5px; font: 11px Verdana, sans-serif;
+  }
+
+  /* --- ventanas flotantes sobre el mapa --- */
+  .ventana {
+    position: absolute; display: none; z-index: 5;
+    background: #1a0d0d; border: 2px solid var(--oro); border-radius: 6px;
+    box-shadow: 0 0 0 2px #3a1a0a, 0 6px 22px #000a;
+    color: #e8d8a8; font: 12px Georgia, serif; padding: 8px 10px;
+  }
+  .ventana.visible { display: block; }
+  .ventana h3 { margin: 0 0 2px; text-align: center; color: var(--oro); font: 16px Georgia, serif; }
+  .ventana h4 { margin: 8px 0 3px; text-align: center; color: #e0b070; font: 12px Georgia, serif; }
+  .ventana label { display: block; margin: 2px 0; }
+  .ventana input[type=text] { width: 100%; background: #fff; color: #000; border: 2px inset #999; font: 12px Verdana; }
+  .ventana button {
+    display: block; width: 100%; margin: 3px 0; background: #2a1c10; color: var(--oro);
+    border: 1px solid #6b4f22; padding: 2px; cursor: pointer; font: 11px Georgia, serif;
+  }
+  .ventana .cerrar { width: 70px; margin: 8px auto 0; }
+  #v-clanes { left: 284px; top: 186px; width: 196px; }
+  #v-opciones { left: 714px; top: 33px; width: 186px; }
+  #v-opciones label { font: 11px Verdana, sans-serif; color: #d8ccb0; }
+
+  /* --- pie de diagnostico: NO existe en el original, va fuera del marco --- */
+  #pie {
+    position: absolute; left: 0; top: 664px; width: 950px; justify-content: center;
+    font: 10px Verdana, sans-serif; color: #6f675b; display: flex; gap: 12px;
+  }
+  #pie b { color: #c9bda4; font-weight: normal; }
+
+  /* --- menu principal --- */
+  #menu { position: fixed; inset: 0; z-index: 20; background: #05070a;
+          display: flex; align-items: center; justify-content: center; }
+  #panelmenu { position: relative; width: 400px; height: 400px;
+               background: url("assets/ui/menu_principal.png") no-repeat 0 0; }
+  #panelmenu.login   { background-image: url("assets/ui/menu_login.png"); }
+  #panelmenu.credito { background-image: url("assets/ui/menu_creditos.png"); }
+  #panelmenu.borrarc { background-image: url("assets/ui/menu_borrar.png"); }
+  #panelmenu.personajes { background-image: url("assets/ui/menu_personajes.png"); }
+  /* Estas dos las genera build_ui.py a partir del arte original: son la de
+     borrar cuenta con las palabras que sobraban difuminadas. El cliente las
+     tiene en Flash y no se pudieron sacar del ejecutable. */
+  #panelmenu.cuenta  { background-image: url("assets/ui/menu_cuenta.png"); }
+  #panelmenu.pjnuevo { background-image: url("assets/ui/menu_pjnuevo.png"); }
+  #panelmenu .zona:hover { box-shadow: 0 0 10px rgba(232,200,106,.45); border-radius: 4px; }
+  /* Las opciones que el arte original ya trae escritas no necesitan texto; las
+     de las dos pantallas generadas si, y se imitan con la misma familia: una
+     serif en versalitas con perfil negro. */
+  .rotulo { display: flex; align-items: center; justify-content: center;
+            font: 19px Georgia, "Times New Roman", serif; font-variant: small-caps;
+            letter-spacing: .5px; color: #f2f7fa; white-space: nowrap;
+            text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
+  #z-ingresar { left: 150px; top: 136px; width: 101px; height: 17px; }
+  #z-nueva    { left: 118px; top: 168px; width: 160px; height: 22px; }
+  #z-borrar   { left: 110px; top: 203px; width: 174px; height: 23px; }
+  #z-info     { left: 126px; top: 246px; width: 143px; height: 17px; }
+  #z-salir    { left: 38px;  top: 350px; width: 60px;  height: 14px; }
+  #z-volver   { left: 279px; top: 284px; width: 83px;  height: 18px; }
+  #z-aceptar  { left: 130px; top: 212px; width: 78px;  height: 16px; }
+  /* la franja donde menu_borrar.png lleva escrito "Borrar Cuenta" */
+  #z-crearc   { left: 95px;  top: 204px; width: 210px; height: 25px; }
+  #z-borrarc  { left: 95px;  top: 204px; width: 210px; height: 25px; }
+  /* rotulos ya dibujados en menu_personajes.png */
+  #z-pj-crear  { left: 48px;  top: 102px; width: 66px; height: 23px; }
+  #z-pj-borrar { left: 203px; top: 102px; width: 78px; height: 23px; }
+  #z-pj-entrar { left: 121px; top: 194px; width: 84px; height: 23px; }
+  #z-pj-crearlo{ left: 95px;  top: 248px; width: 210px; height: 25px; }
+
+  /* --- eleccion de personaje: tres ranuras, como en el cliente --- */
+  #ranuras { position: absolute; left: 40px; top: 131px; width: 320px; display: none; }
+  #ranuras.visible { display: block; }
+  #ranuras .fila { height: 20px; border-radius: 3px; cursor: pointer;
+                   display: flex; align-items: center; justify-content: center;
+                   font: 14px Georgia, serif; font-variant: small-caps; color: #dfeaef;
+                   text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
+  #ranuras .fila:hover { box-shadow: 0 0 10px rgba(232,200,106,.35); }
+  #ranuras .fila.sel   { color: #ffe9a8; box-shadow: 0 0 10px rgba(232,200,106,.6); }
+  #ranuras .fila.vacia { color: #a9b9c0; }
+
+  /* --- creacion de personaje --- */
+  #crearpj { display: none; }
+  #crearpj.visible { display: block; }
+  #pjnombre, #pjraza { position: absolute; left: 44px; width: 246px; height: 18px;
+                       background: transparent; border: 0; outline: 0;
+                       font: 14px Georgia, serif; color: #241c12;
+                       text-align: center; text-align-last: center; }
+  #pjnombre { top: 126px; }
+  /* sin el adorno nativo del desplegable: la barra blanca ya la dibuja el arte */
+  #pjraza   { top: 180px; appearance: none; -webkit-appearance: none; cursor: pointer; }
+  #pjraza option { color: #241c12; }
+  #lbl-raza { position: absolute; left: 55px; top: 154px; width: 90px; height: 21px;
+              justify-content: flex-start; font-size: 17px; }
+  #lbl-sexo { position: absolute; left: 55px; top: 203px; width: 66px; height: 21px;
+              justify-content: flex-start; font-size: 17px; }
+  #sexos { position: absolute; left: 128px; top: 203px; height: 21px;
+           display: flex; gap: 16px; align-items: center; }
+  #sexos span { font: 15px Georgia, serif; font-variant: small-caps; color: #cfdde4;
+                cursor: pointer; padding: 0 3px; border-radius: 3px;
+                text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
+  #sexos span.sel { color: #ffe9a8; box-shadow: 0 0 9px rgba(232,200,106,.55); }
+  #pjstats { position: absolute; left: 20px; right: 20px; top: 228px; text-align: center;
+             font: 11px Georgia, serif; color: #dbe7ec; text-shadow: 1px 1px 0 #000; }
+  #srvestado { position: absolute; left: 272px; top: 322px; font: 12px/13px Georgia, serif;
+               color: #cbbfa6; text-shadow: 0 1px 0 #000; }
+  #srvestado.si { color: #8ce08c; } #srvestado.no { color: #e88a7a; }
+  #entrar { display: none; }
+  #entrar.visible { display: block; }
+  #entrar input { position: absolute; left: 44px; width: 246px; height: 17px;
+                  background: transparent; border: 0; outline: 0;
+                  font: 14px Georgia, serif; color: #241c12; text-align: center; }
+  #aviso { position: absolute; left: 24px; right: 24px; top: 296px; text-align: center;
+           font: 11px Georgia, serif; color: #ffe9a8; text-shadow: 0 1px 0 #000; min-height: 1.2em; }
+
+  #dialogo {
+    position: absolute; left: 50%; top: 190px; transform: translateX(-50%);
+    display: none; z-index: 9; width: 300px; text-align: center;
+    background: #1a0d0d; border: 2px solid var(--oro); border-radius: 5px;
+    box-shadow: 0 0 0 2px #3a1a0a, 0 6px 22px #000a; padding: 10px 12px;
+    color: #e8d8a8; font: 12px/1.4 Georgia, serif;
+  }
+  #dialogo.visible { display: block; }
+  #dialogo input {
+    width: 110px; margin: 8px 0 4px; text-align: center;
+    background: #fff; color: #000; border: 2px inset #999; font: 13px Verdana;
+  }
+  .dlg-botones { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+  .dlg-botones button {
+    background: #2a1c10; color: var(--oro); border: 1px solid #6b4f22;
+    padding: 3px 12px; cursor: pointer; font: 11px Georgia, serif;
+  }
+  .dlg-botones button:hover { background: #45301a; }
+
+  #carga { position: fixed; inset: 0; background: #07070a; display: grid; place-content: center; gap: 12px; z-index: 30; }
+  #barra { width: 260px; height: 6px; background: #241c12; }
+  #progreso { height: 100%; width: 0; background: var(--oro); transition: width .15s; }
+</style>
+
+<div id="escala">
+  <div id="juego">
+    <canvas id="pantalla" width="642" height="470"></canvas>
+
+    <div class="cifra" id="n-hp">&mdash;</div><div class="barra" id="b-hp"><i></i></div>
+    <div class="cifra" id="n-mp">&mdash;</div><div class="barra" id="b-mp"><i></i></div>
+    <div class="cifra" id="n-sp">&mdash;</div><div class="barra" id="b-sp"><i></i></div>
+    <div class="cifra" id="n-lv">&mdash;</div><div class="barra" id="b-lv"><i></i></div>
+
+    <div class="valor der" id="st-nivel"  style="top:232px">&mdash;</div>
+    <div class="valor der" id="st-puntos" style="top:259px">&mdash;</div>
+    <div class="valor izq" id="st-str"    style="top:286px">&mdash;</div>
+    <div class="valor izq" id="st-def"    style="top:313px">&mdash;</div>
+    <div class="valor izq" id="st-speed"  style="top:341px">&mdash;</div>
+    <div class="valor izq" id="st-magi"   style="top:368px">&mdash;</div>
+    <div class="valor" id="st-raza">&mdash;</div>
+
+    <button class="mas subir" data-stat="1" style="top:287px" title="subir Fuerza">+</button>
+    <button class="mas subir" data-stat="2" style="top:314px" title="subir Defensa">+</button>
+    <button class="mas subir" data-stat="3" style="top:342px" title="subir Inteligencia">+</button>
+    <button class="mas subir" data-stat="4" style="top:369px" title="subir Magia">+</button>
+
+    <button class="botoncito" id="b-ayuda" title="Ayuda">?</button>
+    <button class="botoncito" id="b-refrescar" title="Refrescar la pantalla">R</button>
+
+    <div class="zona pestana tab activa" data-tab="dragon"   style="left:288px; display:none"></div>
+    <div class="zona pestana tab" data-tab="inventario" style="left:288px"></div>
+    <div class="zona pestana tab" data-tab="equipo"     style="left:378px"></div>
+    <div class="zona pestana tab" data-tab="magias"     style="left:468px"></div>
+    <div class="zona pestana tab" data-tab="clanes"     style="left:558px"></div>
+    <div class="zona pestana tab" data-tab="online"     style="left:648px"></div>
+    <div class="zona pestana tab" data-tab="chat"       style="left:738px"></div>
+    <div class="zona pestana tab" data-tab="opciones"   style="left:828px"></div>
+
+    <div class="zona" id="z-salirdbo" style="left:100px; top:606px; width:108px; height:20px" title="Salir de DBO"></div>
+
+    <div id="caja">
+      <div class="hoja panel" data-panel="inventario">
+        <canvas id="cv-inv" width="160" height="160"></canvas>
+        <div class="botonera">
+          <button id="btn-usar">Usar Item</button>
+          <button class="flecha" id="btn-sube">&uarr;</button>
+          <button class="flecha" id="btn-baja">&darr;</button>
+          <button id="btn-tirar">Arrojar Item</button>
+        </div>
+      </div>
+
+      <div class="hoja panel" data-panel="equipo">
+        <img src="assets/ui/equipo.png" width="181" height="177" style="display:block">
+        <canvas id="cv-equipo" width="181" height="177" style="position:absolute; left:0; top:0"></canvas>
+      </div>
+
+      <div class="hoja panel" data-panel="magias">
+        <div class="listavb" id="lista-magias"></div>
+        <div class="botonera"><button id="btn-lanzar">Lanzar</button></div>
+      </div>
+
+      <div class="hoja panel" data-panel="online">
+        <div class="listavb" id="lista-online" style="bottom:4px"></div>
+      </div>
+    </div>
+
+    <div id="chatzona">
+      <div id="chatlog"></div>
+      <input id="entrada" autocomplete="off"
+             placeholder="Enter para hablar  ·  !nombre privado  ·  %clan  ·  /comandos">
+    </div>
+
+    <div class="ventana panel" id="v-clanes" data-panel="clanes">
+      <h3>Clanes</h3>
+      <div style="text-align:center; color:#e0b070">Panel de Control</div>
+      <h4>Nombre</h4><input type="text" id="cl-nombre">
+      <h4>Acceso</h4><input type="text" id="cl-acceso">
+      <h4>Manejar Miembros</h4>
+      <button>Crear Postulante</button>
+      <button>Crear Miembro</button>
+      <button>Sacar Miembro</button>
+      <button>Cambiar Acceso</button>
+      <h4>Nombre del Clan</h4>
+      <div style="text-align:center" id="cl-clan">&mdash;</div>
+      <h4>Rango</h4>
+      <div style="text-align:center" id="cl-rango">0</div>
+      <button style="margin-top:6px">Retirarse del Clan</button>
+      <button class="cerrar" data-cerrar>Cerrar</button>
+    </div>
+
+    <div class="ventana panel" id="v-opciones" data-panel="opciones">
+      <h4 style="margin-top:0">Opciones del Jugador</h4>
+      <label><input type="checkbox" id="o-pnombre" checked> Nombre</label>
+      <label><input type="checkbox" id="o-pdano" checked> Puntos de Daño</label>
+      <label><input type="checkbox" id="o-pbarra" checked> Barra HP</label>
+      <h4>Opciones de los NPC</h4>
+      <label><input type="checkbox" id="o-nnombre" checked> Nombres</label>
+      <label><input type="checkbox" id="o-ndano" checked> Puntos de Daño</label>
+      <label><input type="checkbox" id="o-nbarra" checked> Barra HP</label>
+      <h4>Sonido y Musica</h4>
+      <label style="display:inline-block; width:48%"><input type="checkbox" id="o-musica" checked> Musica</label>
+      <label style="display:inline-block; width:48%"><input type="checkbox" id="o-sonidos" checked> Sonidos</label>
+      <h4>Opciones del Chat</h4>
+      <label><input type="checkbox" id="o-burbuja" checked> Burbuja de Texto</label>
+      <label>Mapa
+        <select id="irA" style="width:100%; background:#fff; color:#000; font:11px Verdana"></select>
+      </label>
+      <label><input type="checkbox" id="o-scroll" checked> Auto Scroll en el chat</label>
+      <button class="cerrar" data-cerrar>Cerrar</button>
+    </div>
+
+    <div id="globo"></div>
+
+    <!-- Dialogo de cantidad: el cliente lo usa para arrojar y para el banco -->
+    <div id="dialogo">
+      <div id="dlg-texto"></div>
+      <input id="dlg-cant" type="text" autocomplete="off">
+      <div class="dlg-botones">
+        <button id="dlg-ok">Aceptar</button>
+        <button id="dlg-no">Cancelar</button>
+      </div>
+    </div>
+
+    <div id="pie">
+      <span>Mapa <b id="mapa">&mdash;</b></span>
+      <span>Pos <b id="pos">&mdash;</b></span>
+      <span>Musica <b id="musica">&mdash;</b></span>
+      <span><b id="fps">&mdash;</b> fps</span>
+      <span>NPCs <b id="npcs">0</b></span>
+      <span>En linea <b id="online">&mdash;</b></span>
+      <span id="stats"></span>
+      <span id="cartel" style="color:#e8c86a"></span>
+    </div>
+  </div>
+</div>
+
+<div id="menu">
+  <div id="panelmenu">
+    <div class="zona" id="z-ingresar" title="Ingresar"></div>
+    <div class="zona" id="z-nueva" title="Nueva Cuenta"></div>
+    <div class="zona" id="z-borrar" title="Borrar Cuenta"></div>
+    <div class="zona" id="z-info" title="Informacion"></div>
+    <div class="zona" id="z-salir" title="Salir"></div>
+    <div class="zona" id="z-volver" style="display:none" title="Regresar"></div>
+    <div class="zona" id="z-aceptar" style="display:none" title="Ingresar"></div>
+    <div class="zona rotulo" id="z-crearc" style="display:none">Crear Cuenta</div>
+    <div class="zona" id="z-borrarc" style="display:none" title="Borrar Cuenta"></div>
+    <div class="zona" id="z-pj-crear"  style="display:none" title="Crear"></div>
+    <div class="zona" id="z-pj-borrar" style="display:none" title="Borrar"></div>
+    <div class="zona" id="z-pj-entrar" style="display:none" title="Ingresar"></div>
+    <div class="zona rotulo" id="z-pj-crearlo" style="display:none">Crear Personaje</div>
+    <div id="srvestado">&hellip;</div>
+    <div id="entrar">
+      <input id="cuenta" maxlength="20" autocomplete="off" style="top:126px">
+      <input id="clave" type="password" maxlength="20" autocomplete="off" style="top:181px">
+    </div>
+    <div id="ranuras"></div>
+    <div id="crearpj">
+      <input id="pjnombre" maxlength="20" autocomplete="off">
+      <div class="rotulo" id="lbl-raza">Raza</div>
+      <select id="pjraza"></select>
+      <div class="rotulo" id="lbl-sexo">Sexo</div>
+      <div id="sexos">
+        <span data-sexo="0" class="sel">Masculino</span><span data-sexo="1">Femenino</span>
+      </div>
+      <div id="pjstats"></div>
+    </div>
+    <div id="aviso"></div>
+  </div>
+</div>
+
+<div id="carga">
+  <div style="text-align:center; color:#e8c86a">Cargando&hellip;</div>
+  <div id="barra"><div id="progreso"></div></div>
+</div>
+
+<script type="module" src="src/game.js"></script>
