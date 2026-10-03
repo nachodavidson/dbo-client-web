@@ -38,6 +38,6 @@ echo.
 echo   Listo. Se abrieron cuatro ventanas: dejalas abiertas mientras juegan.
 echo.
 echo   En esta maquina:  http://127.0.0.1:8080
-echo   Desde otro PC:    http://falopa:8080      (por Tailscale)
+echo   Desde otro PC:    http://%COMPUTERNAME%:8080
 echo.
 pause
