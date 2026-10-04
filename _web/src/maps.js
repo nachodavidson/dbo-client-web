@@ -18,9 +18,9 @@ export const TIPO = {
   NADA: 0, BLOQUEADO: 1, WARP: 2, SUELO: 4,
 };
 
-// Casillas por las que no se puede caminar
-const SOLIDOS = new Set([1, 4, 16, 19]);
-export const esSolido = (t) => SOLIDOS.has(t);
+// Nomes el tipus 1 es paret. El 4 es "els NPC no s'hi posen" pero el jugador si
+// hi camina: si no, no s'arriba al warp que hi ha just al darrere.
+export const esSolido = (t) => t === 1;
 
 export async function cargarMapas(url) {
   const resp = await fetch(url);
@@ -81,3 +81,45 @@ export const idx = (x, y) => y * ANCHO + x;
 export const tipoEn = (m, x, y) =>
   (x < 0 || y < 0 || x >= ANCHO || y >= ALTO) ? TIPO.BLOQUEADO : m.tipos[idx(x, y)];
 export const datoEn = (m, x, y, i) => m.datos[idx(x, y) * 3 + i];
+
+// MAPDATA del servidor: el mateix que pinta el client de PC. 31x31 caselles,
+// 26 camps cadascuna (9 capes, tipus, 3 dades, 3 textos, llum, 9 fulls).
+const CAMPOS_TILE = 26;
+export function mapaDeCampos(f) {
+  const total = ANCHO * ALTO;
+  if (!f || f.length < 14 + total * CAMPOS_TILE) return null;
+  const id = parseInt(f[1], 10) || 0;
+  if (!id) return null;
+  const capas = new Uint16Array(total * 9);
+  const hojas = new Uint8Array(total * 9);
+  const tipos = new Uint8Array(total);
+  const datos = new Uint16Array(total * 3);
+  const carteles = new Map();
+  let p = 14;
+  const u16 = (v) => {
+    v = parseInt(v, 10) || 0;
+    return v > 0 && v <= 65535 ? v : 0;
+  };
+  for (let i = 0; i < total; i++) {
+    for (let s = 0; s < 9; s++) capas[i * 9 + s] = u16(f[p++]);
+    tipos[i] = parseInt(f[p++], 10) || 0;
+    for (let s = 0; s < 3; s++) datos[i * 3 + s] = u16(f[p++]);
+    for (let s = 0; s < 3; s++) {
+      const txt = f[p++] || '';
+      if (txt.trim()) {
+        if (!carteles.has(i)) carteles.set(i, []);
+        carteles.get(i)[s] = txt;
+      }
+    }
+    p++;
+    for (let s = 0; s < 9; s++) hojas[i * 9 + s] = parseInt(f[p++], 10) || 0;
+  }
+  const npcs = [];
+  for (let i = 0; i < 15; i++) npcs.push(parseInt(f[p++], 10) || 0);
+  return {
+    id, nombre: (f[2] || '').trim(), musica: (f[9] || '').trim(),
+    indoors: parseInt(f[13], 10) || 0, moral: parseInt(f[4], 10) || 0,
+    revision: parseInt(f[3], 10) || 0,
+    npcs, capas, hojas, tipos, datos, carteles, delServidor: true,
+  };
+}

@@ -1,6 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Dream Blue Online</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <style>
   /* La interfaz ES la del cliente: `assets/ui/juego.png` (950x660, sacada del
      ejecutable). Todo lo de encima esta colocado en coordenadas medidas sobre
@@ -28,7 +29,12 @@
 
   canvas#pantalla {
     position: absolute; left: 281px; top: 28px; width: 642px; height: 470px;
-    display: block; image-rendering: pixelated; background: #000;
+    display: block; image-rendering: auto; background: #000;
+    outline: none; box-shadow: none;
+  }
+  canvas#pantalla:focus,
+  canvas#pantalla:focus-visible {
+    outline: none; box-shadow: none;
   }
 
   /* --- barras: el relleno es de color macizo, como en el cliente, y el
@@ -229,7 +235,7 @@
 
   #dialogo {
     position: absolute; left: 50%; top: 190px; transform: translateX(-50%);
-    display: none; z-index: 9; width: 300px; text-align: center;
+    display: none; z-index: 20; width: 320px; text-align: center;
     background: #1a0d0d; border: 2px solid var(--oro); border-radius: 5px;
     box-shadow: 0 0 0 2px #3a1a0a, 0 6px 22px #000a; padding: 10px 12px;
     color: #e8d8a8; font: 12px/1.4 Georgia, serif;
@@ -246,14 +252,106 @@
   }
   .dlg-botones button:hover { background: #45301a; }
 
+  #tutorial {
+    display: none; position: absolute; left: 48px; top: 18px; width: 620px; height: 440px;
+    z-index: 25; box-sizing: border-box; flex-direction: column;
+    background: #140c08; border: 2px solid var(--oro); color: #f0e2c4;
+    box-shadow: 0 0 0 2px #3a1a0a, 0 10px 28px #000; padding: 10px 12px 8px;
+    font: 12px/1.4 Georgia, serif;
+  }
+  #tutorial.visible { display: flex; }
+  #tutorial h2 { margin: 0 0 6px; text-align: center; color: #f0d080; font-size: 16px; }
+  #tutorial .cuerpo { overflow: auto; flex: 1; padding-right: 8px; }
+  #tutorial h3 { margin: 8px 0 2px; color: #ffe9a8; font-size: 13px; }
+  #tutorial p { margin: 0 0 4px; }
+  #tutorial ul { margin: 0 0 4px 16px; padding: 0; }
+  #tutorial li { margin: 0 0 2px; }
+  #tutorial .pie {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-top: 8px; border-top: 1px solid #6b4f22; padding-top: 6px;
+  }
+  #tutorial label { cursor: pointer; color: #e8d8a8; }
+  #tutorial button {
+    background: #2a1c10; color: var(--oro); border: 1px solid #6b4f22;
+    padding: 3px 14px; cursor: pointer; font: 12px Georgia, serif;
+  }
+  #tutorial button:hover { background: #45301a; }
+  #tutorial table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+  #tutorial th, #tutorial td { border: 1px solid #6b4f22; padding: 3px 6px; text-align: left; }
+  #tutorial th { color: #ffe9a8; font-weight: normal; }
+
+  #teclas-win {
+    display: none; position: absolute; left: 150px; top: 24px; width: 420px; height: 430px;
+    z-index: 26; box-sizing: border-box; flex-direction: column;
+    background: #140c08; border: 2px solid var(--oro); color: #f0e2c4;
+    box-shadow: 0 0 0 2px #3a1a0a, 0 10px 28px #000; padding: 10px 12px 8px;
+    font: 12px/1.35 Georgia, serif;
+  }
+  #teclas-win.visible { display: flex; }
+  #teclas-win h2 { margin: 0 0 6px; text-align: center; color: #f0d080; font-size: 16px; }
+  #teclas-lista { overflow: auto; flex: 1; }
+  #teclas-win .fila {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; padding: 3px 0; border-bottom: 1px solid #3a2a18;
+  }
+  #teclas-win .fila button {
+    min-width: 92px; background: #2a1c10; color: #ffe9a8; border: 1px solid #6b4f22;
+    cursor: pointer; font: 12px Georgia, serif; padding: 2px 6px;
+  }
+  #teclas-win .fila button.espera { color: #7dff4a; }
+  #teclas-win .nota { margin: 6px 0 0; color: #cbbfa6; font-size: 11px; }
+  #teclas-win .pie { display: flex; justify-content: space-between; margin-top: 6px; }
+  #teclas-win .pie button {
+    background: #2a1c10; color: var(--oro); border: 1px solid #6b4f22;
+    padding: 3px 12px; cursor: pointer; font: 12px Georgia, serif;
+  }
+
   #carga { position: fixed; inset: 0; background: #07070a; display: grid; place-content: center; gap: 12px; z-index: 30; }
   #barra { width: 260px; height: 6px; background: #241c12; }
   #progreso { height: 100%; width: 0; background: var(--oro); transition: width .15s; }
+
+  #tienda {
+    display: none; position: absolute; left: 292px; top: 36px; width: 620px; height: 452px;
+    z-index: 14; color: #f3e6c4; padding: 8px 10px;
+    background:
+      radial-gradient(circle at 20% 0%, #4a3018 0%, transparent 42%),
+      repeating-linear-gradient(90deg, #2a1a10 0 2px, #3a2414 2px 7px);
+    border: 3px solid #e0b45a; box-shadow: inset 0 0 0 2px #6a4a18, 0 10px 28px #000;
+  }
+  #td-titulo { text-align: center; color: #f0d080; font: bold 18px Georgia, serif; margin-bottom: 4px; }
+  #td-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 6px; flex-wrap: wrap; }
+  #td-tabs button { background: transparent; border: 0; color: #d8c49a; cursor: pointer; font: 12px Verdana, sans-serif; }
+  #td-tabs button.sel { color: #7dff4a; text-decoration: underline; }
+  #td-cuerpo { display: flex; gap: 8px; height: 318px; }
+  #td-rejilla {
+    width: 360px; height: 318px; overflow: auto;
+    display: grid; grid-template-columns: repeat(8, 42px); gap: 2px; align-content: start;
+    background: #1a100a; border: 2px solid #e0b45a; padding: 4px;
+  }
+  #td-rejilla .celda {
+    width: 40px; height: 40px; background: #0c0c0c center no-repeat; border: 1px solid #c9a24a;
+    position: relative; cursor: pointer;
+  }
+  #td-rejilla .celda.sel { outline: 2px solid #3ec6ff; outline-offset: -3px; }
+  #td-rejilla .v {
+    position: absolute; right: 1px; bottom: 0; color: #ffe14a;
+    font: bold 11px Verdana, sans-serif; text-shadow: 0 0 2px #000;
+  }
+  #td-ficha {
+    flex: 1; border: 2px solid #e0b45a; background: #070707; padding: 6px 8px; overflow: auto;
+    font-size: 12px; line-height: 1.35;
+  }
+  #td-ficha .cab { color: #e0b45a; font-weight: bold; margin-top: 4px; }
+  #td-ficha .nom { color: #fff; }
+  #td-pie { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  #td-pago { width: 200px; font-size: 12px; }
+  #td-pie button { background: transparent; border: 0; color: #f0e6c8; cursor: pointer; font: 13px Verdana, sans-serif; }
+  #td-pie button:hover { color: #ffe14a; }
 </style>
 
 <div id="escala">
   <div id="juego">
-    <canvas id="pantalla" width="642" height="470"></canvas>
+    <canvas id="pantalla" width="642" height="470" tabindex="-1"></canvas>
 
     <div class="cifra" id="n-hp">&mdash;</div><div class="barra" id="b-hp"><i></i></div>
     <div class="cifra" id="n-mp">&mdash;</div><div class="barra" id="b-mp"><i></i></div>
@@ -321,19 +419,20 @@
 
     <div class="ventana panel" id="v-clanes" data-panel="clanes">
       <h3>Clanes</h3>
-      <div style="text-align:center; color:#e0b070">Panel de Control</div>
-      <h4>Nombre</h4><input type="text" id="cl-nombre">
+      <div id="cl-ayuda" style="font:11px Verdana,sans-serif;color:#c8b48a;margin:4px 8px 6px">Fundar: nivel 20 y 3000 dorados. En el chat: .clan fundar Nombre. El chat del clan es .c texto.</div>
+      <h4>Nombre</h4><input type="text" id="cl-nombre" maxlength="20" placeholder="Clan o miembro">
+      <button id="cl-fundar" type="button">Fundar clan</button>
       <h4>Acceso</h4><input type="text" id="cl-acceso">
       <h4>Manejar Miembros</h4>
-      <button>Crear Postulante</button>
-      <button>Crear Miembro</button>
-      <button>Sacar Miembro</button>
-      <button>Cambiar Acceso</button>
+      <button type="button" id="cl-postulante">Crear Postulante</button>
+      <button type="button" id="cl-miembro">Crear Miembro</button>
+      <button type="button" id="cl-sacar">Sacar Miembro</button>
+      <button type="button" id="cl-acceso">Cambiar Acceso</button>
       <h4>Nombre del Clan</h4>
       <div style="text-align:center" id="cl-clan">&mdash;</div>
       <h4>Rango</h4>
       <div style="text-align:center" id="cl-rango">0</div>
-      <button style="margin-top:6px">Retirarse del Clan</button>
+      <button type="button" id="cl-salir" style="margin-top:6px">Retirarse del Clan</button>
       <button class="cerrar" data-cerrar>Cerrar</button>
     </div>
 
@@ -358,7 +457,82 @@
       <button class="cerrar" data-cerrar>Cerrar</button>
     </div>
 
+    <div id="tienda">
+      <div id="td-titulo">Bienvenido Viajero!</div>
+      <div id="td-tabs"></div>
+      <div id="td-cuerpo">
+        <div id="td-rejilla"></div>
+        <div id="td-ficha"></div>
+      </div>
+      <div id="td-pie">
+        <div id="td-pago"></div>
+        <button type="button" id="td-negociar">Negociar</button>
+        <button type="button" id="td-reparar">Reparar Items</button>
+        <button type="button" id="td-cerrar">Regresar</button>
+      </div>
+    </div>
+
     <div id="globo"></div>
+
+    <div id="tutorial">
+      <h2>Cómo se juega</h2>
+      <div class="cuerpo">
+        <h3>Razas</h3>
+        <p>Hay 3 razas.</p>
+        <table>
+          <tr><th>Raza</th><th>Oficio</th></tr>
+          <tr><td>Lindors</td><td>Magos</td></tr>
+          <tr><td>Mummins</td><td>Arqueros</td></tr>
+          <tr><td>Mundols</td><td>Guerreros</td></tr>
+        </table>
+        <p>Hay losetas de una sola raza. Si no eres de esa raza, no pasas.</p>
+        <h3>Acciones</h3>
+        <table>
+          <tr><th>Acción</th><th>Tecla</th></tr>
+          <tr><td>Moverse</td><td>WASD o flechas</td></tr>
+          <tr><td>Correr</td><td>Mantener Shift</td></tr>
+          <tr><td>Ataque físico</td><td>Control</td></tr>
+          <tr><td>Recoger</td><td>Espacio</td></tr>
+        </table>
+        <p>Estas teclas se cambian escribiendo en el chat <b>.teclado</b> (con el punto).</p>
+        <h3>Atributos</h3>
+        <table>
+          <tr><th>Atributo</th><th>Sirve para</th></tr>
+          <tr><td>Fuerza</td><td>El daño que haces</td></tr>
+          <tr><td>Defensa</td><td>El daño que recibes</td></tr>
+          <tr><td>Magia</td><td>El daño mágico que haces</td></tr>
+          <tr><td>Inteligencia</td><td>Cuántos puntos te dan al subir de nivel</td></tr>
+        </table>
+        <table>
+          <tr><th>Inteligencia</th><th>Puntos al subir</th></tr>
+          <tr><td>1 a 9</td><td>1</td></tr>
+          <tr><td>10 a 19</td><td>2</td></tr>
+          <tr><td>20 a 29</td><td>3</td></tr>
+          <tr><td>30 (máximo)</td><td>4</td></tr>
+        </table>
+        <p>No se puede subir Inteligencia por encima de 30. En nivel 1, lo más rentable es llevarla a 30 cuanto antes: a partir de ahí, cada nivel da 4 puntos para repartir. Los + verdes gastan 1 punto.</p>
+        <h3>Magias</h3>
+        <p>Cuando aprendes una magia, sale en la lista Magias con su número: la primera es 1, la segunda es 2, y así.</p>
+        <p>Se asigna a una tecla con <b>.asignar q 1</b> o con el nombre: <b>.asignar q bola de fuego</b>. Marca un objetivo y pulsa esa tecla. No se lanza caminando.</p>
+        <h3>Si mueres</h3>
+        <p>Si mueres con el equipo puesto, lo sueltas en ese mapa. En los bosques élficos de entrenamiento no pierdes equipo ni experiencia.</p>
+        <p>Para recuperarlo, vuelve al mapa donde te mataron y recógelo. Si otro jugador lo coge antes, o si desaparece por el refresco del servidor (por defecto, a los 20 minutos), ya no está.</p>
+      </div>
+      <div class="pie">
+        <label><input type="checkbox" id="tutorial-no"> No volver a mostrar este mensaje</label>
+        <button type="button" id="tutorial-cerrar">Cerrar</button>
+      </div>
+    </div>
+
+    <div id="teclas-win">
+      <h2>Teclas</h2>
+      <div id="teclas-lista"></div>
+      <p class="nota">Clic en una tecla y pulsa la nueva. Esc cancela. Las flechas tambien mueven. Se abre con .teclado. Las magias: .asignar q 1 o .asignar q nombre.</p>
+      <div class="pie">
+        <button type="button" id="teclas-reset">Restablecer</button>
+        <button type="button" id="teclas-cerrar">Cerrar</button>
+      </div>
+    </div>
 
     <!-- Dialogo de cantidad: el cliente lo usa para arrojar y para el banco -->
     <div id="dialogo">
@@ -418,9 +592,210 @@
   </div>
 </div>
 
+<div id="tactil">
+  <div id="mv-jugar">
+    <div id="mv-hud">
+      <div class="fila"><b>HP</b><span class="barra"><i id="mv-hp" class="hp"></i></span><em id="mv-hp-n"></em></div>
+      <div class="fila"><b>MP</b><span class="barra"><i id="mv-mp" class="mp"></i></span><em id="mv-mp-n"></em></div>
+      <div class="fila"><b>SP</b><span class="barra"><i id="mv-sp" class="sp"></i></span><em id="mv-sp-n"></em></div>
+      <div class="fila"><b id="mv-nv">Nv</b><span class="barra"><i id="mv-xp" class="xp"></i></span><em id="mv-st"></em></div>
+    </div>
+    <div id="mv-zoom">
+      <button type="button" id="mv-mas">+</button>
+      <button type="button" id="mv-menos">−</button>
+    </div>
+    <div id="mv-log"></div>
+    <div id="mv-avis"></div>
+    <div id="mv-base">
+      <button type="button" id="mv-correr">ANDAR</button>
+      <div id="mv-knob"></div>
+    </div>
+    <div id="mv-der">
+      <div id="mv-magias">
+        <button type="button" data-h="0">M1</button>
+        <button type="button" data-h="1">M2</button>
+        <button type="button" data-h="2">M3</button>
+      </div>
+      <button type="button" id="mv-atacar">ATACAR</button>
+      <button type="button" id="mv-recoger">RECOGER</button>
+      <button type="button" id="mv-menu">MENU</button>
+    </div>
+    <button type="button" id="mv-chat">CHAT</button>
+  </div>
+  <div id="mv-teclado" hidden>
+    <input id="mv-msg" autocomplete="off" enterkeyhint="send" placeholder="Mensaje, !privado, %clan, /comando">
+    <button type="button" id="mv-enviar">Enviar</button>
+  </div>
+  <div id="mv-menu">
+    <button type="button" id="mv-x">Cerrar</button>
+    <h2>Què vols fer?</h2>
+    <div id="mv-menu-lista"></div>
+    <button type="button" id="mv-tornar">Tornar al mapa</button>
+  </div>
+  <div id="mv-hoja">
+    <button type="button" id="mv-hoja-x">Cerrar</button>
+    <h2 id="mv-hoja-tit"></h2>
+    <div class="cuerpo" id="mv-hoja-cuerpo"></div>
+  </div>
+  <div id="mv-elegir">
+    <button type="button" id="mv-elegir-x">Cerrar</button>
+    <h2>Asignar magia</h2>
+    <div id="mv-lista-magia"></div>
+  </div>
+</div>
+
 <div id="carga">
   <div style="text-align:center; color:#e8c86a">Cargando&hellip;</div>
   <div id="barra"><div id="progreso"></div></div>
 </div>
 
-<script type="module" src="src/game.js"></script>
+<script type="module" src="src/game.js?v=12"></script>
+<script>
+  if (matchMedia('(pointer: coarse)').matches || (innerWidth < 820 && matchMedia('(hover: none)').matches) || /[?&]movil=1/.test(location.search))
+    document.body.classList.add('movil');
+</script>
+<style>
+  #tactil { display: none; }
+  body.movil #tactil { display: block; }
+  body.movil { overscroll-behavior: none; }
+  #mv-jugar { display: none; }
+  body.movil.enlinia #mv-jugar { display: block; }
+  #mv-avis {
+    display: none; position: fixed; z-index: 100; left: 16px; right: 16px; top: 38%;
+    text-align: center; color: #ffe08a; font: 700 16px/1.3 Verdana, sans-serif;
+    text-shadow: 0 1px 3px #000; pointer-events: none;
+  }
+  body.movil #mv-avis.mostrar { display: block; }
+  #mv-base, #mv-der button, #mv-chat, #mv-correr {
+    touch-action: none; -webkit-user-select: none; user-select: none;
+  }
+  #mv-base {
+    position: fixed; z-index: 30; left: 12px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    width: 128px; height: 128px; border-radius: 50%;
+    background: rgba(20,14,8,.45); border: 2px solid rgba(232,200,106,.7);
+  }
+  #mv-knob {
+    position: absolute; left: 40px; top: 40px; width: 48px; height: 48px;
+    border-radius: 50%; background: rgba(232,200,106,.85); pointer-events: none;
+  }
+  #mv-correr {
+    position: absolute; left: 28px; top: -18px; width: 72px; height: 32px;
+    border-radius: 16px; border: 2px solid #e8c86a; background: #1b140e; color: #e8c86a;
+    font: 700 11px Verdana, sans-serif;
+  }
+  #mv-correr.on { background: #e8c86a; color: #1b140e; }
+  #mv-der {
+    position: fixed; z-index: 30; right: 10px;
+    bottom: calc(58px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  }
+  #mv-magias { display: flex; gap: 6px; }
+  #mv-der button, #mv-chat, #mv-menu-lista button, #mv-elegir button, #mv-teclado button {
+    min-width: 64px; min-height: 46px; padding: 6px 8px; border-radius: 10px;
+    border: 2px solid #e8c86a; background: rgba(20,12,8,.82); color: #f0e2c0;
+    font: 700 12px/1.1 Verdana, sans-serif;
+  }
+  #mv-atacar { background: rgba(120,24,18,.9); min-width: 78px; min-height: 58px; }
+  #mv-chat {
+    position: fixed; z-index: 31; right: 10px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+  #mv-teclado {
+    position: fixed; z-index: 60; left: 0; right: 0;
+    bottom: 0; display: flex; gap: 6px; padding: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    background: #120e0a; border-top: 2px solid #e8c86a;
+  }
+  #mv-teclado[hidden] { display: none; }
+  #mv-msg {
+    flex: 1; font: 16px Verdana, sans-serif; padding: 8px; border: 0;
+    background: #fff; color: #111;
+  }
+  #mv-menu, #mv-hoja, #mv-elegir {
+    position: fixed; inset: 0; z-index: 40; display: none; overflow: auto;
+    background: rgba(8,6,4,.94); padding: 18px 12px 28px;
+  }
+  #mv-menu.on, #mv-hoja.on, #mv-elegir.on { display: block; }
+  #mv-menu h2, #mv-hoja h2, #mv-elegir h2 {
+    margin: 0 0 12px; text-align: center; color: #e8c86a; font: 18px Georgia, serif;
+  }
+  #mv-menu-lista, #mv-lista-magia { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  #mv-menu-lista button, #mv-lista-magia button { width: 46%; min-height: 52px; }
+  #mv-hoja .cuerpo { display: flex; justify-content: center; }
+  #mv-x { position: sticky; top: 0; float: right; }
+  body.movil #escala { transform: none !important; width: 100%; height: 100%; }
+  body.movil #juego {
+    position: fixed; inset: 0; z-index: 5; overflow: visible;
+    background: #0a0a0c !important;
+  }
+  body.movil.enlinia #juego { z-index: 8; }
+  body.movil.enlinia #menu, body.movil.enlinia #carga { display: none !important; }
+  body.movil #pantalla {
+    position: fixed !important; z-index: 2; margin: 0;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+  body.movil #juego > *:not(#pantalla):not(#dialogo):not(#tienda):not(#tutorial):not(#globo):not(#teclas-win) {
+    display: none !important;
+  }
+  body.movil #dialogo.visible {
+    position: fixed; top: 28%; z-index: 70; width: min(360px, 92vw); font-size: 16px;
+  }
+  body.movil #dialogo input { font-size: 18px; height: 40px; }
+  body.movil .dlg-botones button { min-height: 44px; font-size: 16px; }
+  body.movil #tienda {
+    position: fixed; inset: 8px; width: auto; height: auto; left: 8px; top: 8px; z-index: 55;
+  }
+  body.movil #td-cuerpo { height: calc(100% - 120px); flex-direction: column; }
+  body.movil #td-rejilla { width: 100%; height: 46%; }
+  body.movil #panelmenu { transform: scale(min(1, calc(94vw / 400))); }
+  #mv-hud {
+    position: fixed; z-index: 30; left: 8px; top: calc(6px + env(safe-area-inset-top));
+    width: min(232px, 62vw); pointer-events: none;
+    font: 10px/1 Verdana, sans-serif; color: #f6edd8;
+    text-shadow: 0 1px 2px #000;
+  }
+  #mv-hud .fila { display: flex; align-items: center; gap: 4px; height: 14px; white-space: nowrap; }
+  #mv-hud b { min-width: 18px; font-weight: 700; }
+  #mv-hud .barra { flex: 1; height: 7px; background: rgba(0,0,0,.55); border: 1px solid #000; min-width: 36px; }
+  #mv-hud .barra i { display: block; height: 100%; width: 0; }
+  #mv-hud .hp { background: #e23b3b; }
+  #mv-hud .mp { background: #3a78e0; }
+  #mv-hud .sp { background: #2eae4a; }
+  #mv-hud .xp { background: #e0b03a; }
+  #mv-hud em { font-style: normal; text-align: right; }
+  #mv-zoom {
+    position: fixed; z-index: 30; right: 8px; top: calc(6px + env(safe-area-inset-top));
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #mv-zoom button {
+    width: 40px; height: 40px; border-radius: 10px; border: 2px solid #e8c86a;
+    background: rgba(20,12,8,.82); color: #f0e2c0; font: 700 22px/1 Verdana, sans-serif;
+    touch-action: none;
+  }
+  #mv-log {
+    position: fixed; z-index: 29; left: 8px;
+    bottom: calc(168px + env(safe-area-inset-bottom));
+    width: min(220px, 48vw); max-height: 42px; overflow: hidden;
+    font: 10px/14px Verdana, sans-serif; color: #fff;
+    text-shadow: 0 1px 2px #000; pointer-events: none;
+  }
+  #mv-menu { padding-bottom: 80px; }
+  #mv-menu h2 { font-size: 22px; }
+  .mv-grup { width: 100%; margin: 14px 0 4px; color: #a89878; font: 11px Verdana, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+  #mv-menu-lista button { width: 47%; min-height: 58px; font-size: 15px; border-radius: 14px; }
+  body.movil #tutorial.visible {
+    position: fixed; left: 4vw; top: 8vh; width: 92vw; height: auto; max-height: 78vh;
+    z-index: 80; overflow: hidden;
+  }
+  body.movil #tutorial .cuerpo { max-height: 52vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+  body.movil #tutorial button { min-height: 44px; font-size: 16px; }
+  body.movil #teclas-win.visible {
+    position: fixed; left: 4vw; top: 8vh; width: 92vw; height: auto; max-height: 78vh; z-index: 80;
+  }
+  #mv-tornar {
+    position: sticky; bottom: 8px; display: block; width: 100%; min-height: 52px; margin-top: 16px;
+    border-radius: 14px; border: 2px solid #e8c86a; background: #e8c86a; color: #1b140e;
+    font: 700 16px Verdana, sans-serif;
+  }
+</style>
