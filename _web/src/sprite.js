@@ -26,10 +26,8 @@ export const DIR = { ARRIBA: 0, ABAJO: 1, IZQ: 2, DER: 3 };
 // invertido) fallaba el 29%: de ahi que el gorro pareciera mas alto y las alas
 // taparan al personaje de frente, que era otra pose del ala.
 const ATAQUE = 2;
-// El fotograma de reposo NO es el mismo en las cuatro direcciones: medido
-// contra el cliente Windows sale [arriba 1, abajo 0, izquierda 1, derecha 0].
-// Con esta tabla tres de las cuatro direcciones salen IDENTICAS pixel a pixel
-// (0 de ~500 px); arriba se queda en un 5%, pendiente de afinar.
+const MS_ATAQUE = 200;
+// Reposo medido contra el cliente Windows: [arriba 1, abajo 0, izquierda 1, derecha 0].
 const REPOSO_POR_DIR = [1, 0, 1, 0];
 
 // Colores sacados del propio binario del cliente (modulo base 0x401000 del
@@ -54,7 +52,7 @@ export const COLOR_ACCESO = [
   '#ffff00',  // 3  desarrollador
   '#ff00ff',  // 4  administrador   <- este es el confirmado
 ];
-export const COLOR_NPC = '#ff0000';       // la rama "agresivo" de esa rutina
+export const COLOR_NPC = '#ffffff';
 
 // Orden de ranuras: Armadura, Arma, Casco, Escudo, Botas, Amuleto, Hada.
 //
@@ -88,7 +86,6 @@ const ORDEN_DE_ESPALDAS = [1, 3, 0, 4, 2, 5, 6];
 // el resto del equipo: es el patron clasico de este motor (si miras al norte,
 // arma y escudo van al otro lado del muneco).
 const DETRAS_DE_ESPALDAS = [1, 3];
-const MS_ATAQUE = 260;
 
 export class Actor {
   constructor(hoja, sprite, x, y) {
@@ -100,7 +97,9 @@ export class Actor {
     this.paso = 0;
     this.nombre = '';
     this.moviendo = false;
-    this.atacandoHasta = 0;
+    this.cola = [];
+    this.atkT0 = 0;
+    this.proximoGolpe = 0;
     this.hojaGrande = null;              // BIGSPRITES, para los NPCs grandes
     this.grande = false;
     // Lo que lleva puesto, para pintarlo sobre el personaje: iconos de 32 px
@@ -109,37 +108,90 @@ export class Actor {
     this.puesto = null;                  // array de `pic` (0 = ranura vacia)
   }
 
-  atacar() { this.atacandoHasta = performance.now() + MS_ATAQUE; }
+  atacar() {
+    const ahora = performance.now();
+    // El gest dura 200 ms, pero no se puede repetir hasta que pasa el golpe
+    // (1 s). Si no, mantener la tecla de una magia lo dispara a toda velocidad.
+    if (this.atkT0 && ahora - this.atkT0 < 1000) return;
+    this.atkT0 = ahora;
+  }
 
   frame() {
     const base = this.dir * 3;
-    if (performance.now() < this.atacandoHasta) return base + ATAQUE;
+    if (this.atkT0) {
+      const t = performance.now() - this.atkT0;
+      if (t < MS_ATAQUE) {
+        // El cop es el fotograma +2 de la fila d'aquesta raça, quiet al lloc.
+        // 100 ms el gest, 100 ms el repos. No es desplaça ni un píxel.
+        if (t < 100) return base + ATAQUE;
+        return base + (REPOSO_POR_DIR[this.dir] ?? 0);
+      }
+    }
     const reposo = REPOSO_POR_DIR[this.dir] || 0;
     if (!this.moviendo) return base + reposo;
-    // Al andar se alterna entre el reposo y el otro fotograma del par.
     return base + (this.paso & 1 ? 1 - reposo : reposo);
   }
 
-  // Mueve a otra casilla interpolando: sin esto darian saltos de 32 px.
+  // Los demás no se teletransportan a cada paquete: se encola el paso y se
+  // recorre a velocidad constante. Si el siguiente aviso llega a medias, antes
+  // se reiniciaba el tramo y el personaje iba a trompicones.
   moverA(x, y, dir, ms = 200) {
-    if (dir !== undefined && dir !== null) this.dir = dir;
-    this.desde = { px: this.px, py: this.py };
-    this.hasta = { px: x * TS, py: y * TS };
+    if (!this.cola) this.cola = [];
+    const ultimo = this.cola.length ? this.cola[this.cola.length - 1] : null;
+    const ax = ultimo ? ultimo.x : this.x;
+    const ay = ultimo ? ultimo.y : this.y;
+    if (ax === x && ay === y) {
+      if (dir !== undefined && dir !== null && !this.moviendo && !this.cola.length) this.dir = dir;
+      return;
+    }
+    const lejos = Math.abs(x - ax) + Math.abs(y - ay) > 2;
+    if (lejos) {
+      this.colocar(x, y);
+      if (dir !== undefined && dir !== null) this.dir = dir;
+      return;
+    }
+    this.cola.push({ x, y, dir, ms });
+    if (!this.moviendo) this._siguiente(performance.now());
+  }
+
+  colocar(x, y) {
+    this.cola = [];
     this.x = x; this.y = y;
-    this.t0 = performance.now();
+    this.px = x * TS; this.py = y * TS;
+    this.moviendo = false;
+    this.hasta = null;
+    this.desde = null;
+  }
+
+  _siguiente(ahora) {
+    const paso = this.cola.shift();
+    if (!paso) { this.moviendo = false; this.hasta = null; return; }
+    if (paso.dir !== undefined && paso.dir !== null) this.dir = paso.dir;
+    let ms = paso.ms;
+    if (this.cola.length >= 3) ms = Math.max(80, ms * 0.5);
+    else if (this.cola.length >= 1) ms = Math.max(100, ms * 0.75);
+    this.desde = { px: this.px, py: this.py };
+    this.hasta = { px: paso.x * TS, py: paso.y * TS };
+    this.x = paso.x; this.y = paso.y;
+    this.t0 = ahora;
     this.ms = ms;
     this.moviendo = true;
   }
 
   actualizar(ahora) {
-    if (!this.moviendo || !this.hasta) return;
+    if (!this.moviendo || !this.hasta) {
+      if (this.cola && this.cola.length) this._siguiente(ahora);
+      return;
+    }
     const p = Math.min(1, (ahora - this.t0) / this.ms);
     this.px = this.desde.px + (this.hasta.px - this.desde.px) * p;
     this.py = this.desde.py + (this.hasta.py - this.desde.py) * p;
     if (p >= 1) {
-      this.moviendo = false;
-      this.hasta = null;
+      this.px = this.hasta.px;
+      this.py = this.hasta.py;
       this.paso = (this.paso + 1) & 3;
+      if (this.cola && this.cola.length) this._siguiente(ahora);
+      else { this.moviendo = false; this.hasta = null; }
     }
   }
 
@@ -212,16 +264,26 @@ export class Actor {
     // Una criatura grande se dibuja 32 px mas arriba (ocupa 64), asi que su
     // nombre tiene que subir lo mismo o queda escrito sobre el cuerpo.
     const arriba = dy - 4 - (this.grande ? 32 : 0);
-    ctx.font = 'bold 10px Verdana, sans-serif';
+    ctx.font = '600 13px Tahoma, Verdana, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#000';
     ctx.fillText(this.nombre, dx + TS / 2 + 1, arriba + 1);
     // Colores del cliente: los jugadores en magenta (comprobado en una
     // captura del juego real, incluido el propio personaje).
-    ctx.fillStyle = this.esNpc
-      ? COLOR_NPC
-      : (COLOR_ACCESO[this.acceso] || COLOR_ACCESO[0]);
+    ctx.fillStyle = this.pk
+      ? '#ff0000'
+      : this.esNpc
+        ? COLOR_NPC
+        : (COLOR_ACCESO[this.acceso] || COLOR_ACCESO[0]);
     ctx.fillText(this.nombre, dx + TS / 2, arriba);
+    // El nom propi de la mascota, a sobre del de l'especie (Perro, Caballo...).
+    if (this.apodo) {
+      const y = arriba - 14;
+      ctx.fillStyle = '#000';
+      ctx.fillText(this.apodo, dx + TS / 2 + 1, y + 1);
+      ctx.fillStyle = '#3d8bff';
+      ctx.fillText(this.apodo, dx + TS / 2, y);
+    }
     ctx.textAlign = 'left';
   }
 }

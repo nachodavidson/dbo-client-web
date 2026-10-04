@@ -75,6 +75,7 @@ export class Interfaz {
   repinta() {
     if (this.pestana === 'equipo') this.pintaEquipo();
     if (this.pestana === 'inventario') this.pintaInventario();
+    this.pintaStats();
   }
 
   setVital(cual, actual, maximo) {
@@ -119,17 +120,41 @@ export class Interfaz {
     barra('lv', s.exp, s.expSig, `${s.exp} / ${s.expSig}`);
   }
 
+  // adds: 3 fuerza, 4 defensa, 5 magia, 6 inteligencia. El paquet nomes
+  // porta el TOTAL (base + equip). El que suma l'equip es la suma dels objectes
+  // posats, aixi la base es total - bonus.
+  bonusEquip(idx) {
+    let n = 0;
+    for (const num of this.equipo) {
+      if (!num) continue;
+      const d = this.items.get(num);
+      if (d && d.adds) n += +d.adds[idx] || 0;
+    }
+    return n;
+  }
+
+  textoStat(total, idx) {
+    const bonus = this.bonusEquip(idx);
+    if (!bonus) return String(total);
+    const base = total - bonus;
+    return bonus > 0 ? `${total} (${base} + ${bonus})` : `${total} (${base} - ${-bonus})`;
+  }
+
   pintaStats() {
     const s = this.stats;
-    const poner = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+    const poner = (id, v, llarg) => {
+      const e = $(id);
+      if (!e) return;
+      e.textContent = v;
+      e.style.fontSize = llarg ? '11px' : '';
+    };
     poner('#st-nivel', s.nivel);
     poner('#st-puntos', s.puntos);
-    poner('#st-str', s.str);
-    poner('#st-def', s.def);
-    poner('#st-speed', s.speed);
-    poner('#st-magi', s.magi);
+    poner('#st-str', this.textoStat(s.str, 3), this.bonusEquip(3));
+    poner('#st-def', this.textoStat(s.def, 4), this.bonusEquip(4));
+    poner('#st-speed', this.textoStat(s.speed, 6), this.bonusEquip(6));
+    poner('#st-magi', this.textoStat(s.magi, 5), this.bonusEquip(5));
     poner('#st-raza', this.raza || '—');
-    // los botones de subir stat solo si hay puntos
     document.querySelectorAll('.subir').forEach(b => { b.style.display = s.puntos > 0 ? 'block' : 'none'; });
     this.pintaBarras();
   }
@@ -256,7 +281,7 @@ export class Interfaz {
       { t: 'Requerimientos', c: 'cab' },
       { t: `${d.reqStr || 0} Fuerza` },
       { t: `${d.reqDef || 0} Defensa` },
-      { t: `${d.reqSpeed || 0} Inteligencia` },
+      { t: `${d.reqMag || 0} Magia` },
       { t: 'Añade', c: 'cab' },
       { t: `HP: ${hp} MP: ${mp} SP: ${sp}` },
       { t: `Fuerza: ${str} Defensa: ${def}` },

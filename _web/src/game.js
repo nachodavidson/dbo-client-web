@@ -1,5 +1,5 @@
-import { cargarMapas, ANCHO, ALTO, TS, tipoEn, datoEn, idx, esSolido } from './maps.js';
-import { Render } from './render.js';
+import { ANCHO, ALTO, TS, tipoEn, datoEn, idx, esSolido, mapaDeCampos } from './maps.js';
+import { Render } from './render.js?v=10';
 import { Actor, DIR } from './sprite.js';
 import { Audio2 } from './audio.js';
 import { Red } from './red.js';
@@ -7,7 +7,8 @@ import { Interfaz, COLS_INV, FILAS_INV, CELDA_INV, SITIOS_EQUIPO } from './ui.js
 import { Musica } from './midi.js';
 import { Efectos, color } from './efectos.js';
 
-const MS_POR_CASILLA = 150;     // velocidad de caminata (ajustable en vivo)
+const MS_POR_CASILLA = 233;     // andar, ~23% mes lent que 190
+const MS_CORRER = 147;
 // Tope de busqueda, no cuenta real: se cargan tiles0, tiles1... hasta que
 // falte uno. Esta instalacion tiene 7; otras tienen mas.
 const HOJAS_TILES_MAX = 32;
@@ -95,12 +96,11 @@ async function cargarTodo(progreso) {
   const tiles = await cargarTiles(aviso);
   const tareas = ['sprites', 'bigsprites', 'items', 'arrows', 'spells']
     .map((n) => cargarHoja(n));
-  tareas.push(cargarMapas('assets/maps.bin'));
   const res = await Promise.all(tareas.map((p) => p.then((r) => { aviso(); return r; })));
 
   return {
     tiles, sprites: res[0], grandes: res[1], items: res[2],
-    flechas: res[3], hechizos: res[4], mapas: res[5],
+    flechas: res[3], hechizos: res[4],
     ms: performance.now() - t0,
   };
 }
@@ -109,6 +109,33 @@ async function cargarTodo(progreso) {
 // servidor que llegan tarde: si el contador cambio desde que se recibio el
 // aviso, ese aviso ya no habla del mapa en el que estamos.
 let seqMapa = 0;
+let ajusteHasta = 0;
+let saltoHasta = 0;
+let forzarPos = false;
+let tSalto = 0;
+function pausaDeSalto() {
+  saltoHasta = performance.now() + 350;
+  clearTimeout(tSalto);
+  tSalto = setTimeout(() => { saltoHasta = 0; }, 350);
+}
+function finDeSalto() {
+  saltoHasta = 0;
+  clearTimeout(tSalto);
+}
+function refrescarPosicion() {
+  if (!estado.enLinea || !estado.red) return;
+  forzarPos = true;
+  ajusteHasta = performance.now() + 1500;
+  pausaDeSalto();
+  estado.red.refrescar();
+}
+
+function fijarMiPos(x, y) {
+  const j = estado.jugador;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  j.x = x; j.y = y; j.px = x * TS; j.py = y * TS;
+  j.moviendo = false; j.destino = null;
+}
 
 // Caja negra de los saltos de mapa. Los fallos de warp solo aparecen cruzando
 // deprisa, y eso no se puede reproducir a mano: hay que mirar el registro
@@ -117,6 +144,43 @@ const DIAG_MAX = 120;
 function anotarSalto(origen, datos) {
   estado.diagWarp.push({ t: Math.round(performance.now()), origen, ...datos });
   if (estado.diagWarp.length > DIAG_MAX) estado.diagWarp.shift();
+}
+
+let esperandoMapa = 0;
+let mapaPendiente = null;
+
+function aplicarMapaRecibido(m) {
+  estado.mapas.set(m.id, m);
+  if (estado.render) estado.render.cache.delete(m.id);
+  const pendiente = mapaPendiente && mapaPendiente.id === m.id ? mapaPendiente : null;
+  if (esperandoMapa === m.id) esperandoMapa = 0;
+  if (pendiente) {
+    mapaPendiente = null;
+    entrarAMapa(m.id, pendiente.x, pendiente.y, 'MAPDATA');
+    if (pendiente.dir) estado.jugador.dir = pendiente.dir;
+    return;
+  }
+  if (estado.mapa && estado.mapa.id === m.id) {
+    m.abiertas = estado.mapa.abiertas || new Set();
+    estado.mapa = m;
+    if (estado.render) {
+      estado.render.componer(m);
+      estado.render.nombreMapa = (m.nombre || '').trim();
+      estado.render.moralMapa = m.moral | 0;
+    }
+    const el = document.getElementById('mapa');
+    if (el) el.textContent = `${m.nombre || '(sin nombre)'}  ·  mapa ${m.id}`;
+    const mus = document.getElementById('musica');
+    if (mus) mus.textContent = m.musica || '—';
+    if (estado.musica) estado.musica.poner(m.musica);
+  }
+  const lista = document.getElementById('irA');
+  if (lista && !lista.querySelector('option[value="' + m.id + '"]')) {
+    const o = document.createElement('option');
+    o.value = m.id;
+    o.textContent = m.id + ' — ' + (m.nombre || '');
+    lista.appendChild(o);
+  }
 }
 
 function entrarAMapa(id, x, y, origen = '?') {
@@ -128,13 +192,24 @@ function entrarAMapa(id, x, y, origen = '?') {
   const j = estado.jugador;
   j.x = x; j.y = y; j.px = x * TS; j.py = y * TS;
   j.moviendo = false; j.destino = null;
-  estado.npcs.clear();                       // los NPCs son de cada mapa
-  estado.suelo.clear();
+  // En línia el servidor ja ha enviat MAPNPCDATA i MAPITEMDATA ABANS del
+  // PLAYERDATA que entra al mapa. Esborrar-los aquí els feia desaparèixer
+  // fins que es premia R (el refresh no canvia de mapa, així que no passava
+  // per aquí). Fora de línia sí que s'han de buidar.
+  if (!estado.enLinea) {
+    estado.npcs.clear();
+    estado.suelo.clear();
+  }
+  m.abiertas = new Set();
+  if (estado.render) estado.render.cache.delete(m.id);
   estado.render.componer(m);                 // compone y cachea: sin espera visible
   $('#mapa').textContent = `${m.nombre || '(sin nombre)'}  ·  mapa ${m.id}`;
   estado.render.nombreMapa = (m.nombre || '').trim();
+  estado.render.moralMapa = m.moral | 0;
   $('#musica').textContent = m.musica || '—';
   if (estado.musica) estado.musica.poner(m.musica);
+  finDeSalto();
+  recuperarTeclado();
   return true;
 }
 
@@ -150,22 +225,224 @@ function mirar(dir) {
   estado.red.mirar(dir);
 }
 
+let razaAviso = 0;
+let costeApariencia = '';
+let vetoTile = null;
+let casillaAnterior = null;
+function razaBloqueada(x, y) {
+  if (!estado.mapa || tipoEn(estado.mapa, x, y) !== 10) return false;
+  // La casella type 10 es d'UNA raza. Data1 es aquesta raza:
+  // 0 Mummins, 1 Lindors, 2 Mundols. El 0 no vol dir "lliure".
+  return (datoEn(estado.mapa, x, y, 0) | 0) !== (estado.miClase | 0);
+}
+function avisarRaza() {
+  const ahora = performance.now();
+  if (ahora - razaAviso < 1200) return;
+  razaAviso = ahora;
+  if (estado.ui) estado.ui.chat('Tu raza no puede cruzar por aqui.', '#ff5555');
+}
+function tornarEnrere(prohibida) {
+  const j = estado.jugador;
+  if (prohibida) vetoTile = prohibida;
+  if (casillaAnterior) fijarMiPos(casillaAnterior.x, casillaAnterior.y);
+  else fijarMiPos(j.x, j.y);
+  saltoHasta = performance.now() + 200;
+}
+
+function puertaTancada(x, y) {
+  const m = estado.mapa;
+  if (!m) return false;
+  const t = tipoEn(m, x, y);
+  if (t !== 5 && t !== 15) return false;
+  return !(m.abiertas && m.abiertas.has(x + ',' + y));
+}
 function intentarMover(dir) {
   const j = estado.jugador;
+  if (performance.now() < saltoHasta) return;
   if (j.moviendo) return;
   j.dir = dir;
-  const corriendo = teclas.has('ShiftLeft') || teclas.has('ShiftRight');
+  const corriendo = estaCorriendo();
   const d = { [DIR.ARRIBA]: [0, -1], [DIR.ABAJO]: [0, 1], [DIR.IZQ]: [-1, 0], [DIR.DER]: [1, 0] }[dir];
   const nx = j.x + d[0], ny = j.y + d[1];
   if (nx < 0 || ny < 0 || nx >= ANCHO || ny >= ALTO) return;
   if (esSolido(tipoEn(estado.mapa, nx, ny))) return;
+  if (puertaTancada(nx, ny)) {
+    mirar(dir);
+    if (estado.enLinea) estado.red.mover(dir, corriendo);
+    return;
+  }
+  if (vetoTile && vetoTile.x === nx && vetoTile.y === ny) { mirar(dir); return; }
+  if (razaBloqueada(nx, ny)) {
+    mirar(dir);
+    vetoTile = { x: nx, y: ny };
+    avisarRaza();
+    return;
+  }
   if (ocupada(nx, ny)) { mirar(dir); return; }
+  casillaAnterior = { x: j.x, y: j.y };
   j.destino = { x: nx, y: ny, dx: d[0], dy: d[1] };
   j.moviendo = true;
   j.t0 = performance.now();
-  j.ms = corriendo ? Math.round(estado.msPorCasilla / 2) : estado.msPorCasilla;
+  j.ms = corriendo ? MS_CORRER : estado.msPorCasilla;
   if (estado.enLinea) estado.red.mover(dir, corriendo);
-  dirEnviada = dir;              // el propio paso ya le dice al servidor hacia donde miro
+  dirEnviada = dir;
+  if (tipoEn(estado.mapa, nx, ny) === 9) mostrarMarcoTienda();
+  else cerrarTienda();
+  if (tipoEn(estado.mapa, nx, ny) !== 13) cerrarApariencia();
+}
+
+const TABS_TIENDA = ['Armas', 'Escudos', 'Armaduras', 'Cascos', 'Magias', 'Otros Objetos/Ventas'];
+
+function esMoneda(num) {
+  if (!num) return false;
+  const d = estado.ui && estado.ui.items.get(num);
+  if (d && d.tipo === 12) return true;
+  return /dorad|moneda|\boro\b|guita|\bgold\b|coin/.test(((d && d.nombre) || '').toLowerCase());
+}
+function esVenta(tr) {
+  return tr.give > 0 && esMoneda(tr.get) && !esMoneda(tr.give);
+}
+function iconoItem(num) {
+  const cv = document.createElement('canvas');
+  cv.width = 32;
+  cv.height = 32;
+  cv.style.cssText = 'display:block;width:32px;height:32px;margin:3px auto;image-rendering:pixelated';
+  const d = estado.ui && estado.ui.items.get(num);
+  if (d && estado.ui.hojaItems && d.pic) {
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    estado.ui.dibujaIcono(ctx, d.pic, 0, 0);
+  }
+  return cv;
+}
+function asegurarTienda() {
+  if (document.getElementById('tienda')) return;
+  const st = document.createElement('style');
+  st.textContent = '#tienda{display:none;position:absolute;left:292px;top:36px;width:620px;height:452px;z-index:40;color:#f3e6c4;padding:8px 10px;background:radial-gradient(circle at 20% 0%,#4a3018 0%,transparent 42%),repeating-linear-gradient(90deg,#2a1a10 0 2px,#3a2414 2px 7px);border:3px solid #e0b45a;box-shadow:inset 0 0 0 2px #6a4a18,0 10px 28px #000}#td-titulo{text-align:center;color:#f0d080;font:bold 18px Georgia,serif;margin-bottom:4px}#td-tabs{display:flex;gap:8px;justify-content:center;margin-bottom:6px;flex-wrap:wrap}#td-tabs button{background:transparent;border:0;color:#d8c49a;cursor:pointer;font:12px Verdana,sans-serif}#td-tabs button.sel{color:#7dff4a;text-decoration:underline}#td-cuerpo{display:flex;gap:8px;height:318px}#td-rejilla{width:360px;height:318px;overflow:auto;display:grid;grid-template-columns:repeat(8,42px);gap:2px;align-content:start;background:#1a100a;border:2px solid #e0b45a;padding:4px}#td-rejilla .celda{width:40px;height:40px;background:#0c0c0c center no-repeat;border:1px solid #c9a24a;position:relative;cursor:pointer}#td-rejilla .celda.sel{outline:2px solid #3ec6ff;outline-offset:-3px}#td-rejilla .v{position:absolute;right:1px;bottom:0;color:#ffe14a;font:bold 11px Verdana,sans-serif;text-shadow:0 0 2px #000}#td-ficha{flex:1;border:2px solid #e0b45a;background:#070707;padding:6px 8px;overflow:auto;font-size:12px;line-height:1.35}#td-ficha .cab{color:#e0b45a;font-weight:bold;margin-top:4px}#td-ficha .nom{color:#fff}#td-pie{display:flex;align-items:center;gap:10px;margin-top:6px}#td-pago{width:200px;font-size:12px}#td-pie button{background:transparent;border:0;color:#f0e6c8;cursor:pointer;font:13px Verdana,sans-serif}';
+  document.head.appendChild(st);
+  const box = document.createElement('div');
+  box.id = 'tienda';
+  box.innerHTML = '<div id="td-titulo">Bienvenido Viajero!</div><div id="td-tabs"></div>'
+    + '<div id="td-cuerpo"><div id="td-rejilla"></div><div id="td-ficha"></div></div>'
+    + '<div id="td-pie"><div id="td-pago"></div>'
+    + '<button type="button" id="td-negociar">Negociar</button>'
+    + '<button type="button" id="td-reparar">Reparar Items</button>'
+    + '<button type="button" id="td-cerrar">Regresar</button></div>';
+  (document.getElementById('juego') || document.body).appendChild(box);
+}
+function mostrarMarcoTienda() {
+  asegurarTienda();
+  const box = document.getElementById('tienda');
+  box.style.display = 'block';
+  if (!estado.tienda) {
+    document.getElementById('td-ficha').innerHTML = 'Cargando el comercio...';
+  }
+}
+function cerrarTienda() {
+  estado.tienda = null;
+  const el = document.getElementById('tienda');
+  if (el) el.style.display = 'none';
+}
+function pintarTienda() {
+  asegurarTienda();
+  const td = estado.tienda;
+  const box = document.getElementById('tienda');
+  if (!td || !box) return;
+  box.style.display = 'block';
+  const neg = document.getElementById('td-negociar');
+  if (neg && !neg.dataset.listo) {
+    neg.dataset.listo = '1';
+    neg.onclick = negociarTienda;
+    document.getElementById('td-cerrar').onclick = cerrarTienda;
+    document.getElementById('td-reparar').onclick = () => {
+      if (estado.ui) estado.ui.chat('Esta tienda no repara objetos.', '#e0b070');
+    };
+  }
+  const tabs = document.getElementById('td-tabs');
+  tabs.innerHTML = TABS_TIENDA.map((n, i) =>
+    '<button type="button" data-p="' + i + '" class="' + (i === td.pagina ? 'sel' : '') + '">' + n + '</button>').join('');
+  tabs.querySelectorAll('button').forEach(b => {
+    b.onclick = () => { td.pagina = +b.dataset.p; td.sel = null; pintarTienda(); };
+  });
+  const slots = td.paginas[td.pagina] || [];
+  let last = 0;
+  slots.forEach((s, i) => { if (s.get) last = i; });
+  const n = Math.min(66, Math.max(48, last + 1));
+  const rej = document.getElementById('td-rejilla');
+  rej.innerHTML = slots.slice(0, n).map((s, i) => {
+    if (!s.get) return '<div class="celda" data-i="' + i + '"></div>';
+    const venta = esVenta(s);
+    const num = venta ? s.give : s.get;
+    return '<div class="celda' + (td.sel === i ? ' sel' : '') + '" data-i="' + i + '" data-num="' + num + '">'
+      + (venta ? '<span class="v">V</span>' : '') + '</div>';
+  }).join('');
+  rej.querySelectorAll('.celda[data-num]').forEach(el => {
+    const num = +el.dataset.num;
+    if (num) el.insertBefore(iconoItem(num), el.firstChild);
+  });
+  rej.querySelectorAll('.celda').forEach(el => {
+    el.onclick = () => { td.sel = +el.dataset.i; pintarTienda(); };
+  });
+  const tr = td.sel != null ? slots[td.sel] : null;
+  const ficha = document.getElementById('td-ficha');
+  const pago = document.getElementById('td-pago');
+  if (!tr || !tr.get) { ficha.innerHTML = ''; pago.innerHTML = ''; return; }
+  const venta = esVenta(tr);
+  const num = venta ? tr.give : tr.get;
+  const d = (estado.ui && estado.ui.items.get(num)) || { nombre: '#' + num, adds: [] };
+  const a = d.adds || [];
+  const cant = venta ? (tr.gval || 1) : (tr.getv || 1);
+  ficha.innerHTML =
+    '<div>Nombre: <span class="nom">' + (d.nombre || '') + '</span></div>' +
+    '<div>Cantidad: ' + cant + '</div>' +
+    '<div class="cab">Requerimientos</div>' +
+    '<div>Fuerza: ' + (d.reqStr || 0) + '</div>' +
+    '<div>Defensa: ' + (d.reqDef || 0) + '</div>' +
+    '<div>Magia: ' + (d.reqMag || 0) + '</div>' +
+    '<div class="cab">Añade</div>' +
+    '<div>Fuerza: ' + (a[3] || 0) + '</div>' +
+    '<div>Defensa: ' + (a[4] || 0) + '</div>' +
+    '<div>Magia: ' + (a[5] || 0) + '</div>' +
+    '<div>Intelig: ' + (a[6] || 0) + '</div>' +
+    '<div>Hp: ' + (a[0] || 0) + '</div><div>Mp: ' + (a[1] || 0) + '</div><div>Sp: ' + (a[2] || 0) + '</div>' +
+    '<div>Experiencia %: ' + (a[7] || 0) + '</div>' +
+    '<div class="cab">Descripcion:</div><div>' + (d.desc || '') + '</div>';
+  const paga = estado.ui.items.get(venta ? tr.get : tr.give);
+  const cuanto = venta ? (tr.getv || 0) : (tr.gval || 0);
+  pago.innerHTML = 'Negociar por: ' + ((paga && paga.nombre) || (cuanto ? 'Dorados' : 'Nada'))
+    + '<br>Cantidad: ' + cuanto;
+}
+function cerrarApariencia() {
+  const el = document.getElementById('apariencia');
+  if (el) el.style.display = 'none';
+}
+function abrirApariencia() {
+  if (!document.getElementById('apariencia')) {
+    const st = document.createElement('style');
+    st.textContent = '#apariencia{display:none;position:absolute;left:340px;top:150px;width:360px;z-index:50;background:#1a1008;border:3px solid #e0b45a;box-shadow:inset 0 0 0 2px #6a4a18,0 10px 28px #000;color:#f3e6c4;padding:16px 18px;text-align:center;font:15px Georgia,serif}#apariencia h3{margin:0 0 10px;color:#f0d080}#apariencia p{margin:0 0 14px;font:13px Verdana,sans-serif;line-height:1.4}#apariencia button{margin:0 8px;background:#d8d0c0;color:#401010;border:2px outset #f0e8d8;padding:5px 16px;cursor:pointer;font:13px Verdana,sans-serif}';
+    document.head.appendChild(st);
+    const box = document.createElement('div');
+    box.id = 'apariencia';
+    box.innerHTML = '<h3>Cambiar de apariencia</h3><p id="ap-txt"></p>'
+      + '<button type="button" id="ap-si">Confirmar</button>'
+      + '<button type="button" id="ap-no">Cancelar</button>';
+    (document.getElementById('juego') || document.body).appendChild(box);
+    document.getElementById('ap-si').onclick = () => {
+      if (estado.red && estado.enLinea) estado.red.enviar('buysprite');
+      cerrarApariencia();
+    };
+    document.getElementById('ap-no').onclick = cerrarApariencia;
+  }
+  document.getElementById('ap-txt').textContent =
+    costeApariencia || '¿Confirmar el cambio de apariencia?';
+  document.getElementById('apariencia').style.display = 'block';
+}
+function negociarTienda() {
+  const td = estado.tienda;
+  if (!td || td.sel == null || !estado.enLinea) return;
+  const tr = td.paginas[td.pagina][td.sel];
+  if (!tr || !tr.get) return;
+  estado.red.enviar('TRADEREQUEST', td.pagina + 1, tr.slot);
 }
 
 // Criaturas y jugadores estorban: no se puede caminar por encima de ellos.
@@ -345,16 +622,22 @@ async function irJuntoA(mapaId, tx, ty, nombre) {
 
 function alLlegar() {
   const j = estado.jugador, m = estado.mapa;
+  if (razaBloqueada(j.x, j.y)) {
+    const mala = { x: j.x, y: j.y };
+    tornarEnrere(mala);
+    avisarRaza();
+    return;
+  }
   j.paso = (j.paso + 1) & 3;
   const t = tipoEn(m, j.x, j.y);
   if (t === 2) {                                   // warp
-    const destino = datoEn(m, j.x, j.y, 0);
-    const dx = datoEn(m, j.x, j.y, 1), dy = datoEn(m, j.x, j.y, 2);
-    if (estado.mapas.has(destino)) {
-      estado.audio.efecto('warp.wav');
-      entrarAMapa(destino, dx, dy, 'warp de casilla');
-      return;
-    }
+    // No saltar amb la casella del mapa local: no coincideix amb la del servidor
+    // i el personatge queda mal colocat. El servidor envia la posicio real.
+    estado.audio.efecto('warp.wav');
+    j.moviendo = false;
+    j.destino = null;
+    pausaDeSalto();
+    return;
   }
   const carteles = m.carteles.get(idx(j.x, j.y));
   const texto = carteles && carteles.find(s => s && s.trim());
@@ -362,18 +645,153 @@ function alLlegar() {
 }
 
 const teclas = new Set();
+let movilCorre = false;
 let pendiente = null;   // ultima direccion pulsada, para toques muy breves
-// Solo las flechas. El juego original no usa WASD, y ademas esas letras hacen
-// falta para escribir en el chat.
-const MAPA_TECLAS = {
-  ArrowUp: DIR.ARRIBA,
-  ArrowDown: DIR.ABAJO,
-  ArrowLeft: DIR.IZQ,
-  ArrowRight: DIR.DER,
+const DEF_TECLAS = {
+  arriba: 'KeyW', abajo: 'KeyS', izq: 'KeyA', der: 'KeyD',
+  correr: 'ShiftLeft', golpe: 'ControlLeft', recoger: 'Space',
+  girar: 'End', chat: 'KeyT', refrescar: 'KeyR',
+  vida: 'F6', mana: 'F7', energia: 'F8', lanzar: 'Insert',
 };
+const NOMBRE_ACCION = [
+  ['arriba', 'Mover arriba'], ['abajo', 'Mover abajo'],
+  ['izq', 'Mover izquierda'], ['der', 'Mover derecha'],
+  ['correr', 'Correr (mantener)'], ['golpe', 'Golpe fisico'],
+  ['recoger', 'Recoger'], ['girar', 'Girar sin moverse'],
+  ['chat', 'Abrir chat'], ['refrescar', 'Refrescar'],
+  ['vida', 'Pocion de vida'], ['mana', 'Pocion de mana'],
+  ['energia', 'Pocion de energia'], ['lanzar', 'Lanzar magia elegida'],
+];
+let TECLAS_CFG = Object.assign({}, DEF_TECLAS);
+try { Object.assign(TECLAS_CFG, JSON.parse(localStorage.getItem('dbo_teclas') || '{}')); } catch (e) {}
+let esperandoTecla = null;
+let movTeclas = {};
+function guardarTeclas() { localStorage.setItem('dbo_teclas', JSON.stringify(TECLAS_CFG)); }
+function codigoDe(accion) { return TECLAS_CFG[accion] || ''; }
+function mismaTecla(cfg, code) {
+  if (!cfg || !code) return false;
+  if (cfg === code) return true;
+  if ((cfg === 'ShiftLeft' || cfg === 'ShiftRight') && (code === 'ShiftLeft' || code === 'ShiftRight')) return true;
+  if ((cfg === 'ControlLeft' || cfg === 'ControlRight') && (code === 'ControlLeft' || code === 'ControlRight')) return true;
+  return false;
+}
+function esTecla(accion, code) { return mismaTecla(codigoDe(accion), code); }
+function nombreTecla(code) {
+  if (!code) return '—';
+  const fijos = {
+    ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Control', ControlRight: 'Control',
+    Space: 'Espacio', Enter: 'Enter', Escape: 'Esc', End: 'Fin', Insert: 'Insert',
+    ArrowUp: 'Flecha arriba', ArrowDown: 'Flecha abajo', ArrowLeft: 'Flecha izq.', ArrowRight: 'Flecha der.',
+  };
+  if (fijos[code]) return fijos[code];
+  if (code.startsWith('Key') && code.length === 4) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  return code;
+}
+function aplicarTeclas() {
+  movTeclas = {
+    ArrowUp: DIR.ARRIBA, ArrowDown: DIR.ABAJO, ArrowLeft: DIR.IZQ, ArrowRight: DIR.DER,
+  };
+  const dir = { arriba: DIR.ARRIBA, abajo: DIR.ABAJO, izq: DIR.IZQ, der: DIR.DER };
+  for (const id of Object.keys(dir)) {
+    const c = codigoDe(id);
+    if (c) movTeclas[c] = dir[id];
+  }
+}
+function estaCorriendo() {
+  if (movilCorre) return true;
+  for (const c of teclas) if (esTecla('correr', c)) return true;
+  return false;
+}
+function teclasAbiertas() {
+  const w = document.getElementById('teclas-win');
+  return !!(w && w.classList.contains('visible'));
+}
+function pintarTeclas() {
+  const lista = document.getElementById('teclas-lista');
+  if (!lista) return;
+  lista.innerHTML = NOMBRE_ACCION.map(([id, nom]) => {
+    const espera = esperandoTecla === id;
+    const txt = espera ? 'pulsa...' : nombreTecla(codigoDe(id));
+    return '<div class="fila"><span>' + nom + '</span><button type="button" data-acc="' + id + '" class="' + (espera ? 'espera' : '') + '">' + txt + '</button></div>';
+  }).join('');
+}
+function abrirTeclas() {
+  esperandoTecla = null;
+  pintarTeclas();
+  const w = document.getElementById('teclas-win');
+  if (w) w.classList.add('visible');
+}
+function cerrarTeclas() {
+  esperandoTecla = null;
+  const w = document.getElementById('teclas-win');
+  if (w) w.classList.remove('visible');
+}
+aplicarTeclas();
+const BINDS = JSON.parse(localStorage.getItem('dbo_binds') || '{}');
+function guardarBinds() { localStorage.setItem('dbo_binds', JSON.stringify(BINDS)); }
+function enJuego() {
+  if (!estado.enLinea || !estado.mapa) return false;
+  const menu = document.getElementById('menu');
+  if (menu && menu.style.display !== 'none') return false;
+  const tut = document.getElementById('tutorial');
+  if (tut && tut.classList.contains('visible')) return false;
+  if (teclasAbiertas()) return false;
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) {
+    if (a.id === 'entrada' && a.readOnly) return true;
+    return false;
+  }
+  return true;
+}
+
+// El mapa es un canvas amb focus. En canviar de mapa es redimensiona i Chrome
+// deixa anar el focus de la finestra: el teclat no torna fins que es clica
+// fora del navegador i es torna a entrar. El canvas no s'ha d'enfocar mai.
+function recuperarTeclado() {
+  const cv = document.getElementById('pantalla');
+  const a = document.activeElement;
+  if (a && a !== document.body && a !== document.documentElement) {
+    const xatejant = a.id === 'entrada' && !a.readOnly;
+    if (!xatejant && (a === cv || a.tagName === 'SELECT' || a.tagName === 'BUTTON' || a.tagName === 'IFRAME')) {
+      a.blur();
+    }
+  }
+  if (!document.hasFocus()) window.focus();
+}
+
+let ultimoPedidoMapa = 0;
+let errorPantalla = '';
+function avisarMovil() {
+  if (!document.body.classList.contains('movil')) return;
+  document.body.classList.toggle('enlinia', !!estado.enLinea);
+  const avis = document.getElementById('mv-avis');
+  if (avis) {
+    const t = errorPantalla || (estado.enLinea && !estado.mapa ? 'Carregant el mapa...' : '');
+    avis.textContent = t;
+    avis.classList.toggle('mostrar', !!t);
+  }
+  if (estado.enLinea && !estado.mapa && estado.red) {
+    const ahora = performance.now();
+    if (ahora - ultimoPedidoMapa > 1500) {
+      ultimoPedidoMapa = ahora;
+      try { estado.red.pedirMapa(false); } catch (e) {
+        errorPantalla = e.message;
+      }
+    }
+  }
+}
+function despertarCanvas() {
+  if (document.body.classList.contains('movil')) aplicarZoomMovil();
+}
 
 function bucle(ahora) {
+  avisarMovil();
   const j = estado.jugador;
+  if (!estado.mapa) {
+    requestAnimationFrame(bucle);
+    return;
+  }
 
   if (j.moviendo && j.destino) {
     const p = Math.min(1, (ahora - j.t0) / (j.ms || estado.msPorCasilla));
@@ -389,7 +807,7 @@ function bucle(ahora) {
     // Primero las teclas mantenidas (caminar sostenido); si no hay ninguna,
     // se atiende un toque suelto que pudo ocurrir entre dos fotogramas.
     let dir = null;
-    for (const [code, d] of Object.entries(MAPA_TECLAS)) {
+    for (const [code, d] of Object.entries(movTeclas)) {
       if (teclas.has(code)) { dir = d; break; }
     }
     if (dir === null && pendiente !== null) dir = pendiente;
@@ -412,13 +830,19 @@ function bucle(ahora) {
 
   // Las flechas paran al topar con una pared o con cualquier criatura.
   estado.efectos.actualizar(ahora, (x, y) => {
-    if (esSolido(tipoEn(estado.mapa, x, y))) return true;
+    if (esSolido(tipoEn(estado.mapa, x, y)) || puertaTancada(x, y)) return true;
     for (const n of estado.npcs.values()) if (n.x === x && n.y === y) return true;
     return false;
   });
 
-  estado.render.dibujar(estado.mapa, actores, j.px, j.py,
-                        { suelo: estado.suelo.values(), efectos: estado.efectos });
+  try {
+    estado.render.dibujar(estado.mapa, actores, j.px, j.py,
+                          { suelo: estado.suelo.values(), efectos: estado.efectos });
+    errorPantalla = '';
+  } catch (e) {
+    errorPantalla = (e && e.message) || String(e);
+    console.error(e);
+  }
 
   // contador de fotogramas
   fps.n++;
@@ -427,6 +851,8 @@ function bucle(ahora) {
     fps.n = 0; fps.t = ahora;
   }
   $('#pos').textContent = `${j.x},${j.y}`;
+  document.body.classList.toggle('jugando', enJuego());
+  if (document.body.classList.contains('movil')) pintarHudMovil();
   requestAnimationFrame(bucle);
 }
 const fps = { n: 0, t: 0 };
@@ -443,7 +869,7 @@ function pintarHechizos() {
   const filas = [];
   for (let i = 0; i < 20; i++) {
     const num = estado.hechizos[i] || 0;
-    filas.push(num ? estado.ui.nombreHechizo(num) : '<vacio>');
+    filas.push(num ? (i + 1) + '. ' + estado.ui.nombreHechizo(num) : (i + 1) + '. <vacio>');
   }
   estado.ui.pintaLista($('#lista-magias'), filas, estado.hechizoElegido - 1);
 }
@@ -454,9 +880,14 @@ function pintarOnline(nombres) {
 
 function lanzarMagia() {
   if (!estado.enLinea) return;
-  // mensajes textuales del cliente original
+  // No se toca la posicion: si se cancela el paso a medias, el dibujo se queda
+  // una o dos casillas por detras del servidor y hay que darle a Refrescar.
   if (estado.jugador.moviendo) {
-    estado.ui.chat('No puedes lanzar la magia al caminar!', '#e07a6a');
+    const ahora = performance.now();
+    if (ahora - (lanzarMagia.aviso || 0) > 800) {
+      lanzarMagia.aviso = ahora;
+      estado.ui.chat('No puedes lanzar la magia al caminar!', '#e07a6a');
+    }
     return;
   }
   if (!estado.hechizoElegido) { estado.ui.chat('Elige una magia aprendida.', '#e07a6a'); return; }
@@ -488,18 +919,68 @@ function usarPocion(tipo) {
 
 // Todo lo que se escribe en el chat pasa por aqui. El original distingue por
 // el primer caracter: '!' privado, '%' al clan, '/' comando; el resto se habla.
+function resolverMagia(token) {
+  const q = String(token || '').trim().toLowerCase();
+  if (!q || !estado.hechizos) return 0;
+  if (/^\d+$/.test(q)) {
+    const n = parseInt(q, 10);
+    return (n >= 1 && n <= 20 && estado.hechizos[n - 1]) ? n : 0;
+  }
+  let parcial = 0;
+  for (let i = 0; i < 20; i++) {
+    const num = estado.hechizos[i] || 0;
+    if (!num) continue;
+    const nom = estado.ui.nombreHechizo(num).toLowerCase();
+    if (nom === q) return i + 1;
+    if (nom.includes(q)) parcial = parcial ? -1 : i + 1;
+  }
+  return parcial > 0 ? parcial : 0;
+}
+function asignarMagia(linea) {
+  const m = String(linea || '').match(/^\.asignar\s+(\S+)\s+(.+)$/i);
+  if (!m) return false;
+  const tecla = m[1].toLowerCase();
+  const slot = resolverMagia(m[2]);
+  if (!slot) {
+    estado.ui.chat('No tienes esa magia. Usa el numero de la lista o su nombre.', '#e07a6a');
+    return true;
+  }
+  BINDS[tecla] = slot;
+  guardarBinds();
+  const nom = estado.ui.nombreHechizo(estado.hechizos[slot - 1]);
+  estado.ui.chat('Tecla ' + tecla + ' lanza ' + slot + '. ' + nom, '#8cff7a');
+  return true;
+}
 function mandarChat(t) {
+  if (asignarMagia(t)) return;
   const red = estado.red;
+  if (/^\.clan\b/i.test(t)) {
+    const rest = t.replace(/^\.clan\s*/i, '').trim();
+    const fundar = rest.match(/^(?:fundar|crear)\s+(\S+)/i);
+    if (fundar) {
+      red.enviar('makeguild', fundar[1]);
+      estado.ui.chat('Fundando el clan ' + fundar[1] + '. Hacen falta nivel 20 y 3000 dorados.', '#e8c86a');
+      return;
+    }
+    if (!rest) {
+      const v = document.querySelector('#v-clanes');
+      if (v) v.classList.add('visible');
+      estado.ui.chat('Clan: nivel 20 y 3000 dorados. .clan fundar Nombre  ·  .c texto es el chat.', '#e8c86a');
+    }
+  }
   if (t[0] === '!') {                       // !nombre mensaje
     const hueco = t.indexOf(' ');
     if (hueco < 2) { estado.ui.chat('Usar: !Nombre del jugador mensaje', '#e07a6a'); return; }
     red.privado(t.slice(1, hueco), t.slice(hueco + 1));
-    estado.ui.chat(t, '#c8a2e8');
     return;
   }
-  if (t[0] === '%') { red.alClan(t.slice(1)); estado.ui.chat(t, '#7fd1c8'); return; }
+  if (t[0] === '%') { red.alClan(t.slice(1)); return; }
   if (t[0] === '/') { comando(t); return; }
-  estado.ui.chat('> ' + t, '#9a8f7d');
+  if (t[0] === "'") {
+    const g = t.slice(1).trim();
+    if (g) red.enviar('broadcastmsg', g);
+    return;
+  }
   red.enviar('saymsg', t);
 }
 
@@ -571,13 +1052,15 @@ function comando(linea) {
 
 // Cuadro de cantidad, el que usa el cliente para arrojar y para el banco.
 // Devuelve el numero elegido, o null si se cancela.
-function pedirCantidad(texto) {
+function pedirCantidad(texto, sugerido) {
   return new Promise((listo) => {
     const dlg = $('#dialogo'), campo = $('#dlg-cant');
+    if (dlg.classList.contains('visible')) { listo(null); return; }
     $('#dlg-texto').textContent = texto;
-    campo.value = '';
+    campo.value = sugerido ? String(sugerido) : '';
     dlg.classList.add('visible');
     campo.focus();
+    if (sugerido) campo.select();
     const cerrar = (v) => {
       dlg.classList.remove('visible');
       $('#dlg-ok').removeEventListener('click', ok);
@@ -596,6 +1079,22 @@ function pedirCantidad(texto) {
     $('#dlg-no').addEventListener('click', no);
     campo.addEventListener('keydown', tecla);
   });
+}
+
+async function elegirCantidadMoneda(num, tiene, accion) {
+  tiene = tiene || 0;
+  if (!esMoneda(num) || tiene <= 1) return tiene > 0 ? tiene : 1;
+  const nombre = (estado.ui.nombreDe(num) || 'OBJETOS').toUpperCase();
+  const cofre = !!estado.bolsaEsCofre;
+  const dest = cofre
+    ? (accion === 'añadir' ? 'al cofre' : 'del cofre')
+    : (accion === 'añadir' ? 'a la mochila' : 'de la mochila');
+  const n = await pedirCantidad(
+    `Selecciona la cantidad de ${nombre} que quieras ${accion} ${dest}`, tiene);
+  if (n === null || isNaN(n)) return null;
+  if (n <= 0) { estado.ui.chat('Cantidad no permitida!', '#e07a6a'); return null; }
+  if (n > tiene) { estado.ui.chat('No tienes esa cantidad!', '#e07a6a'); return null; }
+  return n;
 }
 
 // Arrojar al suelo. Si el objeto se acumula (monedas, pociones) el cliente
@@ -741,10 +1240,17 @@ function comprobarServidor() {
     try { ws.close(); } catch (e) {}
   };
   const fallo = setTimeout(() => poner(false), 4000);
-  ws.onopen = () => setTimeout(() => {
-    clearTimeout(fallo);
-    poner(ws.readyState === WebSocket.OPEN);
-  }, 1500);
+  ws.onopen = () => {
+    // La sonda no ha d'ocupar una plaça de jugador. El servidor, si ja té
+    // el pedaç, veu aquest paquet i no gasta un slot.
+    const sonda = new Uint8Array(6);
+    sonda[0] = 112; sonda[1] = 105; sonda[2] = 110; sonda[3] = 103; sonda[4] = 0; sonda[5] = 237;
+    try { ws.send(sonda); } catch (e) {}
+    setTimeout(() => {
+      clearTimeout(fallo);
+      poner(ws.readyState === WebSocket.OPEN);
+    }, 800);
+  };
   ws.onerror = () => { clearTimeout(fallo); poner(false); };
   ws.onclose = () => { clearTimeout(fallo); poner(false); };
 }
@@ -838,6 +1344,25 @@ function conectar() {
     if (desdeLogin) estadoRed('');
   });
 
+  red.addEventListener('MAPKEY', (e) => {
+    const m = estado.mapa;
+    if (!m) return;
+    const x = parseInt(e.detail[1], 10);
+    const y = parseInt(e.detail[2], 10);
+    if (!m.abiertas) m.abiertas = new Set();
+    const k = x + ',' + y;
+    if (parseInt(e.detail[3], 10)) m.abiertas.add(k);
+    else m.abiertas.delete(k);
+    if (estado.render) estado.render.cache.delete(m.id);
+  });
+
+  red.addEventListener('MAPDONE', () => { finDeSalto(); recuperarTeclado(); });
+
+  red.addEventListener('MAPDATA', (e) => {
+    const m = mapaDeCampos(e.detail);
+    if (m) aplicarMapaRecibido(m);
+  });
+
   red.addEventListener('LOGINOK', (e) => { estado.miIndice = parseInt(e.detail[1], 10); });
 
   // CHECKFORMAP llega en CADA cambio de mapa: al entrar, al cruzar un warp y
@@ -858,18 +1383,21 @@ function conectar() {
   // salto a el. Esto queda solo de red de seguridad por si no llegara (la
   // muerte), y se descarta si algo nos movio mientras tanto.
   red.addEventListener('CHECKFORMAP', (e) => {
+    cerrarTienda();
     const destino = parseInt(e.detail[1], 10);
-    red.pedirMapa(true);                // los 210 mapas ya los tenemos en local
+    const rev = parseInt(e.detail[2], 10) || 0;
+    const tengo = estado.mapas.get(destino);
+    const fresco = !!(tengo && tengo.delServidor && tengo.revision === rev);
+    if (fresco) {
+      red.pedirMapa(true);
+      esperandoMapa = 0;
+    } else {
+      red.pedirMapa(false);
+      esperandoMapa = destino;
+    }
+    red.enviar('spells');
+    pausaDeSalto();
     anotarSalto('aviso CHECKFORMAP', { a: destino, estoyEn: estado.mapa ? estado.mapa.id : null });
-    if (!destino || !estado.mapas.has(destino)) return;
-    if (estado.mapa && estado.mapa.id === destino) return;
-    const seq = seqMapa;
-    setTimeout(() => {
-      if (seq !== seqMapa) return;                       // ya nos movimos: el aviso caduco
-      if (estado.mapa && estado.mapa.id === destino) return;
-      const j = estado.jugador;
-      entrarAMapa(destino, j.x, j.y, 'CHECKFORMAP (red de seguridad)');
-    }, 800);
   });
 
   // DBOWARP no es del juego original: lo inventa el adaptador para /warpmeto y
@@ -892,16 +1420,30 @@ function conectar() {
     const nombre = f[2], sprite = parseInt(f[3], 10) || 0;
     const mapa = parseInt(f[4], 10), x = parseInt(f[5], 10), y = parseInt(f[6], 10);
     const dir = parseInt(f[7], 10) || 0;
-    const acceso = parseInt(f[8], 10) || 0;      // 0 normal ... 4 administrador
+    const acceso = parseInt(f[8], 10) || 0;
+    const pk = parseInt(f[9], 10) || 0;
+    const clan = (f[10] || '').trim();
+    const clanRango = Math.max(0, Math.min(4, parseInt(f[11], 10) || 0));
+    const RANGO = ['', 'Postulante', 'Miembro', 'Oficial', 'Lider'];
 
     if (indice === estado.miIndice) {
       estado.miClase = parseInt(f[12], 10) || 0;
       if (estado.clases.length) estado.ui.setRaza(estado.clases[estado.miClase] || '');
       const primeraVez = !estado.enLinea;
       estado.enLinea = true;
-      if (primeraVez) cerrarMenu();
+      if (primeraVez) {
+        cerrarMenu();
+        document.body.classList.add('enlinia');
+        if (document.body.classList.contains('movil')) aplicarZoomMovil();
+        else abrirTutorial();
+      }
       const j = estado.jugador;
-      j.sprite = sprite; j.nombre = nombre; j.acceso = acceso;
+      j.sprite = sprite; j.nombre = nombre; j.acceso = acceso; j.pk = pk;
+      j.clan = clan; j.clanRango = clan ? clanRango : 0;
+      const nomClan = document.getElementById('cl-clan');
+      const nomRango = document.getElementById('cl-rango');
+      if (nomClan) nomClan.textContent = clan || '—';
+      if (nomRango) nomRango.textContent = clan ? (clanRango + ' · ' + (RANGO[clanRango] || '')) : '0';
 
       // Solo se acepta la posicion del servidor al entrar, al cambiar de mapa
       // o si nos hemos desincronizado de verdad (mas de una casilla). Si no,
@@ -909,21 +1451,31 @@ function conectar() {
       // personaje volviera atras constantemente.
       const cambioMapa = !estado.mapa || estado.mapa.id !== mapa;
       const lejos = Math.abs(j.x - x) > 1 || Math.abs(j.y - y) > 1;
-      if (cambioMapa) {
+      const ajustar = performance.now() < ajusteHasta;
+      if (esperandoMapa === mapa) {
+        mapaPendiente = { id: mapa, x, y, dir };
+      } else if (cambioMapa) {
         entrarAMapa(mapa, x, y, 'PLAYERDATA (el servidor manda)');
         j.dir = dir;
-      } else if (primeraVez || (lejos && !j.moviendo)) {
+        forzarPos = false;
+        ajusteHasta = 0;
+        finDeSalto();
+      } else if (primeraVez || forzarPos || ajustar || (lejos && !j.moviendo)) {
         anotarSalto('PLAYERDATA recoloca', { a: mapa, en: `${x},${y}`, estabaEn: `${j.x},${j.y}` });
-        j.x = x; j.y = y; j.px = x*TS; j.py = y*TS;
-        j.moviendo = false; j.destino = null; j.dir = dir;
+        fijarMiPos(x, y);
+        j.dir = dir;
+        forzarPos = false;
+        ajusteHasta = 0;
+        finDeSalto();
       }
       return;
     }
     // otro jugador
     let a = estado.otros.get(indice);
     if (!a) { a = new Actor(estado.hojaSprites, sprite, x, y); estado.otros.set(indice, a); }
-    a.sprite = sprite; a.nombre = nombre; a.dir = dir; a.acceso = acceso;
-    a.x = x; a.y = y; a.px = x*TS; a.py = y*TS;
+    a.sprite = sprite; a.nombre = nombre; a.dir = dir; a.acceso = acceso; a.pk = pk;
+    a.clan = clan; a.clanRango = clan ? clanRango : 0;
+    a.colocar(x, y);
     a.mapa = mapa;
     // Su equipo pudo llegar antes que este paquete, asi que se aplica aqui
     // tambien: sin la hoja de objetos el personaje se dibuja desnudo.
@@ -949,8 +1501,14 @@ function conectar() {
   // MAPNPCDATA: 15 ranuras de (num, x, y, dir) para el mapa actual
   red.addEventListener('MAPNPCDATA', (e) => {
     const f = e.detail;
-    estado.npcs.clear();
-    for (let ranura = 1; ranura <= 15; ranura++) {
+    for (const ranura of [...estado.npcs.keys()]) {
+      if (ranura <= 15) estado.npcs.delete(ranura);
+    }
+    for (const ranura of [...nombresMascota.keys()]) {
+      if (ranura <= 15) nombresMascota.delete(ranura);
+    }
+    const nRanuras = Math.max(15, Math.floor((f.length - 1) / 4));
+    for (let ranura = 1; ranura <= nRanuras; ranura++) {
       const b = 1 + (ranura - 1) * 4;
       const num = parseInt(f[b], 10);
       if (!num) continue;
@@ -959,6 +1517,7 @@ function conectar() {
       const a = new Actor(estado.hojaSprites, def.sprite, x, y);
       a.dir = dir;
       a.nombre = def.nombre;
+      a.apodo = nombresMascota.get(ranura) || '';
       a.esNpc = true;
       a.grande = def.grande;
       a.hojaGrande = estado.hojaGrandes;
@@ -972,7 +1531,7 @@ function conectar() {
     const a = estado.npcs.get(parseInt(f[1], 10));
     if (!a) return;
     a.moverA(parseInt(f[2], 10), parseInt(f[3], 10), parseInt(f[4], 10),
-             parseInt(f[5], 10) === 2 ? 110 : 220);   // 2 = corriendo
+             parseInt(f[5], 10) === 2 ? 135 : 270);   // 2 = corriendo
   });
 
   red.addEventListener('NPCHP', (e) => {
@@ -989,7 +1548,7 @@ function conectar() {
     const a = estado.otros.get(i);
     if (!a) return;
     a.moverA(parseInt(f[2], 10), parseInt(f[3], 10), parseInt(f[4], 10),
-             parseInt(f[5], 10) === 2 ? 90 : 180);
+             parseInt(f[5], 10) === 2 ? 147 : 233);
   });
 
   red.addEventListener('PLAYERDIR', (e) => {
@@ -1000,13 +1559,41 @@ function conectar() {
   // playerxy: recolocacion seca, sin interpolar (teletransportes)
   red.addEventListener('PLAYERXY', (e) => {
     const f = e.detail;
-    const a = estado.otros.get(parseInt(f[1], 10));
-    if (!a) return;
-    a.x = parseInt(f[2], 10); a.y = parseInt(f[3], 10);
-    a.px = a.x * TS; a.py = a.y * TS; a.moviendo = false; a.hasta = null;
+    const a = parseInt(f[1], 10);
+    const b = parseInt(f[2], 10);
+    const c = parseInt(f[3], 10);
+    // Teleport propi: el servidor manda x,y. Si porta index i es el meu, tambe.
+    if (f[3] === undefined || a === estado.miIndice) {
+      const x = f[3] === undefined ? a : b;
+      const y = f[3] === undefined ? b : c;
+      const j = estado.jugador;
+      const tx = j.destino ? j.destino.x : j.x;
+      const ty = j.destino ? j.destino.y : j.y;
+      const igual = tx === x && ty === y && j.x === x && j.y === y;
+      if (!igual) {
+        vetoTile = { x: tx, y: ty };
+        fijarMiPos(x, y);
+        saltoHasta = performance.now() + 200;
+        return;
+      }
+      fijarMiPos(x, y);
+      finDeSalto();
+      return;
+    }
+    const otro = estado.otros.get(a);
+    if (!otro) return;
+    otro.colocar(b, c);
   });
 
-  // --- criaturas ---
+  const nombresMascota = new Map();
+  const ponerNombreMascota = (slot, nombre) => {
+    nombre = (nombre || '').trim();
+    if (!nombre) return;
+    nombresMascota.set(slot, nombre);
+    const a = estado.npcs.get(slot);
+    if (a) a.apodo = nombre;
+  };
+  red.addEventListener('PETNAME', (e) => ponerNombreMascota(parseInt(e.detail[1], 10), e.detail[2]));
   red.addEventListener('SPAWNNPC', (e) => {
     const f = e.detail;
     const ranura = parseInt(f[1], 10);
@@ -1014,15 +1601,34 @@ function conectar() {
     const def = estado.npcDefs.get(num) || { nombre: '', sprite: 0, grande: false };
     const a = new Actor(estado.hojaSprites, def.sprite, parseInt(f[3], 10), parseInt(f[4], 10));
     a.dir = parseInt(f[5], 10) || 0;
-    a.nombre = def.nombre; a.esNpc = true;
+    a.nombre = def.nombre;
+    a.apodo = nombresMascota.get(ranura) || '';
+    a.esNpc = true;
     a.grande = def.grande; a.hojaGrande = estado.hojaGrandes;
     estado.npcs.set(ranura, a);
     $('#npcs').textContent = estado.npcs.size;
   });
 
+  // Si el hechizo mata al monstruo, NPCDEAD llega antes que el dibujo y el
+  // monstruo ya no esta. Se guarda la ultima casilla para pintar el hechizo ahi,
+  // nunca encima del jugador.
+  const posNpc = new Map();
+  const recordarNpc = (slot, a) => {
+    if (a && Number.isFinite(a.x)) posNpc.set(slot, { x: a.x, y: a.y });
+  };
+
   red.addEventListener('NPCDEAD', (e) => {
-    estado.npcs.delete(parseInt(e.detail[1], 10));
+    const slot = parseInt(e.detail[1], 10);
+    recordarNpc(slot, estado.npcs.get(slot));
+    estado.npcs.delete(slot);
+    nombresMascota.delete(slot);
     $('#npcs').textContent = estado.npcs.size;
+  });
+
+  red.addEventListener('ATTACK', (e) => {
+    const i = parseInt(e.detail[1], 10);
+    const a = i === estado.miIndice ? estado.jugador : estado.otros.get(i);
+    if (a) a.atacar();
   });
 
   red.addEventListener('NPCATTACK', (e) => {
@@ -1054,8 +1660,14 @@ function conectar() {
   });
   red.addEventListener('BLITNPCDMG', (e) =>
     numero(estado.jugador, e.detail[1], 'dano'));
-  red.addEventListener('DAMAGEDISPLAY', (e) =>
-    estado.ui.chat(e.detail[2], color(e.detail[3])));
+  red.addEventListener('DAMAGEDISPLAY', (e) => {
+    const texto = (e.detail[2] || '').trim();
+    if (!texto) return;
+    const lado = parseInt(e.detail[1], 10) === 1 ? 1 : 0;
+    estado.efectos.combate(texto, color(e.detail[3]), lado);
+    const so = soDe(texto);
+    if (so) estado.audio.efecto(so);
+  });
 
   // --- objetos tirados en el suelo ---
   // MAPITEMDATA: 20 ranuras de (num, valor, durabilidad, x, y)
@@ -1089,13 +1701,21 @@ function conectar() {
                        { pic: parseInt(f[3], 10) || 0, alcance: parseInt(f[4], 10) || 5 });
   });
   red.addEventListener('CHECKARROWS', (e) => {
-    const num = parseInt(e.detail[2], 10);
-    const def = estado.flechas.get(num) || { pic: num, alcance: 6 };
-    const j = estado.jugador;
-    estado.efectos.flecha(def.pic, j.x, j.y, j.dir, def.alcance, (x, y) => {
-      const sobre = [...estado.npcs.values()].some(n => n.x === x && n.y === y);
-      estado.red.flechaCayo(sobre ? 1 : 0, num, x, y);
-    });
+    const f = e.detail;
+    const idx = parseInt(f[1], 10);
+    const idFlecha = parseInt(f[2], 10);
+    // dir del paquet: 0 dalt, 1 baix, 2 esquerra, 3 dreta. La columna del sheet es el mateix.
+    const dir = Math.max(0, Math.min(3, parseInt(f[3], 10) || 0));
+    const col = [1, 0, 3, 2][dir];
+    const def = estado.flechas.get(idFlecha) || { pic: 0, alcance: 6 };
+    const quien = idx === estado.miIndice ? estado.jugador : estado.otros.get(idx);
+    const x = quien ? quien.x : estado.jugador.x;
+    const y = quien ? quien.y : estado.jugador.y;
+    estado.efectos.flecha(def.pic, x, y, dir, def.alcance, (tx, ty) => {
+      if (idx !== estado.miIndice) return;
+      const sobre = [...estado.npcs.values()].some(n => n.x === tx && n.y === ty);
+      estado.red.flechaCayo(sobre ? 1 : 0, idFlecha, tx, ty);
+    }, col);
   });
 
   // --- hechizos ---
@@ -1109,7 +1729,119 @@ function conectar() {
   });
   red.addEventListener('SPELLANIM', (e) => {
     const f = e.detail;
-    estado.efectos.magia(parseInt(f[1], 10), parseInt(f[2], 10), parseInt(f[3], 10));
+    const anim = parseInt(f[2], 10) || 0;
+    const ms = parseInt(f[3], 10) || 100;
+    const tipo = parseInt(f[6], 10) || 0;
+    const id = parseInt(f[7], 10);
+    const npc = estado.npcs.get(id);
+    const jug = id === estado.miIndice ? estado.jugador : estado.otros.get(id);
+    let x, y;
+    if (tipo !== 0) {
+      const mem = posNpc.get(id);
+      if (npc) { x = npc.x; y = npc.y; }
+      else if (mem) { x = mem.x; y = mem.y; }
+      else return;
+    } else if (jug) {
+      x = jug.x; y = jug.y;
+    } else if (npc) {
+      x = npc.x; y = npc.y;
+    } else {
+      const mem = posNpc.get(id);
+      if (!mem) return;
+      x = mem.x; y = mem.y;
+    }
+    estado.efectos.magia(anim, x, y, ms);
+  });
+
+  estado.mochila = [];
+  function huecoNegro(num) {
+    if (!num) return false;
+    const d = estado.ui && estado.ui.items.get(num);
+    return !d || String(d.nombre || '').toUpperCase() === 'NO DISPONIBLE';
+  }
+  function marcarBolsa() {
+    // La motxilla té 10-20 forats; la resta arriba com a "NO DISPONIBLE".
+    // El cofre té 50 forats disponibles.
+    const lista = estado.mochila || [];
+    const cerrados = lista.filter(r => r && huecoNegro(r.num)).length;
+    estado.bolsaEsCofre = (lista.length - cerrados) > 20;
+  }
+  function pintarMochila(abrir) {
+    marcarBolsa();
+    let box = document.getElementById('mochila');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'mochila';
+      box.style.cssText = 'position:absolute;left:220px;top:70px;z-index:11;background:#1b140e;border:2px solid #e0c27a;color:#f0e2c0;padding:8px;width:360px';
+      document.getElementById('juego').appendChild(box);
+    }
+    const cells = (estado.mochila || []).map((r, i) => {
+      if (!r || !r.num) return '<div data-i="' + i + '" style="width:32px;height:32px;background:#111;border:1px solid #333"></div>';
+      if (huecoNegro(r.num)) return '<div style="width:32px;height:32px;background:#000;border:1px solid #222"></div>';
+      const d = estado.ui.items.get(r.num);
+      const pic = d ? d.pic : 0;
+      const col = pic % 6, fila = (pic / 6) | 0;
+      return '<div data-i="' + i + '" title="' + (d ? d.nombre : r.num) + '" style="width:32px;height:32px;border:1px solid #5a2a2a;background:#1b0b0d url(assets/items.webp) ' + (-col * 32) + 'px ' + (-fila * 32) + 'px;color:#ffd;font:9px Verdana;text-align:right">' + (r.cant > 1 ? r.cant : '') + '</div>';
+    }).join('');
+    const titulo = estado.bolsaEsCofre ? 'Cofre' : 'Mochila';
+    const ayuda = estado.bolsaEsCofre
+      ? "Clic a l'inventari per guardar al cofre. Clic aqui per treure."
+      : "Clic a l'inventari per guardar. Clic aqui per treure.";
+    box.innerHTML = '<b>' + titulo + '</b> <button id="mochila-x" type="button" style="float:right">Cerrar</button>'
+      + '<div style="font-size:12px;color:#c8b48a;margin:4px 0 6px">' + ayuda + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;width:340px">' + cells + '</div>';
+    if (abrir) box.dataset.abierta = '1';
+    box.style.display = box.dataset.abierta === '1' ? 'block' : 'none';
+    box.querySelector('#mochila-x').onclick = () => {
+      box.style.display = 'none';
+      box.dataset.abierta = '';
+      estado.bolsaAbierta = false;
+    };
+    box.querySelectorAll('[data-i]').forEach(el => {
+      el.onclick = async () => {
+        const i = parseInt(el.dataset.i, 10);
+        const r = estado.mochila[i];
+        if (!r || !r.num || huecoNegro(r.num)) return;
+        const cant = await elegirCantidadMoneda(r.num, r.cant || 1, 'sacar');
+        if (cant === null) return;
+        estado.red.enviar('bankwithdraw', i + 1, cant);
+      };
+    });
+  }
+  function leerBanco(campos, base) {
+    const out = [];
+    for (let i = 0; i < 50; i++) {
+      const o = base + i * 3;
+      out.push({
+        num: parseInt(campos[o], 10) || 0,
+        cant: parseInt(campos[o + 1], 10) || 0,
+        dur: parseInt(campos[o + 2], 10) || 0,
+      });
+    }
+    return out;
+  }
+  red.addEventListener('PLAYERBANK', (e) => {
+    estado.mochila = leerBanco(e.detail, 1);
+    pintarMochila(false);
+  });
+  red.addEventListener('OPENBANK', () => {
+    estado.bolsaAbierta = true;
+    pintarMochila(true);
+  });
+  red.addEventListener('PLAYERBANKUPDATE', (e) => {
+    const f = e.detail;
+    const slot = (parseInt(f[1], 10) || 1) - 1;
+    if (!estado.mochila.length) estado.mochila = leerBanco([], 99);
+    estado.mochila[slot] = {
+      num: parseInt(f[2], 10) || 0,
+      cant: parseInt(f[3], 10) || 0,
+      dur: parseInt(f[4], 10) || 0,
+    };
+    pintarMochila(false);
+  });
+  red.addEventListener('BANKMSG', (e) => {
+    const t = (e.detail[1] || '').trim();
+    if (t && estado.ui) estado.ui.chat(t, '#e07a6a');
   });
 
   // --- ambiente ---
@@ -1125,18 +1857,26 @@ function conectar() {
   // sword.wav. La correspondencia sale de la tabla del propio cliente.
   const SONIDOS = {
     attack: 'sword.wav', critical: 'critical.wav', miss: 'miss.wav',
-    key: 'key.wav', warp: 'warp.wav', pain: 'pain.wav', thunder: 'Thunder.wav',
+    block: 'miss.wav', shield: 'miss.wav',
+    key: 'key.wav', warp: 'warp.wav', pain: 'pain.wav', thunder: 'thunder.wav',
   };
+  const soDe = (texto) => {
+    const s = (texto || '').toLowerCase();
+    if (/critica|gran fuerza/.test(s)) return 'critical.wav';
+    if (/bloque/.test(s)) return 'miss.wav';
+    if (/fallado|no te hace|no hace da|no le hace/.test(s)) return 'miss.wav';
+    return '';
+  };
+  const esCombate = (texto) => /golpeas|puntos de vida|puntos de experiencia|critica|gran fuerza|bloque|no te hace|no hace da|ha fallado|invulnerable|has matado|te quita|le sacas/.test((texto || '').toLowerCase());
   red.addEventListener('SOUND', (e) => {
     const n = (e.detail[1] || '').trim();
     if (!n) return;
-    // las magias van numeradas: magic1.wav, magic2.wav...
     const f = SONIDOS[n] || (n.endsWith('.wav') ? n : n + '.wav');
     estado.audio.efecto(f);
   });
   red.addEventListener('LEVELUP', () => {
     estado.audio.efecto('level.wav');
-    estado.ui.chat('¡Has subido de nivel!', '#e8c86a');
+    estado.efectos.combate('¡Nivel!', '#00ff00');
   });
   red.addEventListener('ITEMBREAK', (e) =>
     estado.ui.chat(`Se te ha roto ${estado.ui.nombreDe(parseInt(e.detail[1], 10))}.`, '#e07a6a'));
@@ -1155,10 +1895,31 @@ function conectar() {
       data3: parseInt(f[7], 10) || 0,          // numero de flecha si es un arco
       reqStr: parseInt(f[8], 10) || 0,
       reqDef: parseInt(f[9], 10) || 0,
-      reqSpeed: parseInt(f[10], 10) || 0,
+      reqMag: parseInt(f[10], 10) || 0,
       adds: [13,14,15,16,17,18,19,20].map(i => parseInt(f[i], 10) || 0),
       desc: (f[21] || '').trim(),
     });
+  });
+  red.addEventListener('TRADE', (e) => {
+    const f = e.detail;
+    const paginas = [];
+    let k = 3;
+    for (let p = 0; p < 6; p++) {
+      const slots = [];
+      for (let i = 0; i < 66; i++) {
+        slots.push({
+          slot: i + 1,
+          give: parseInt(f[k], 10) || 0,
+          gval: parseInt(f[k + 1], 10) || 0,
+          get: parseInt(f[k + 2], 10) || 0,
+          getv: parseInt(f[k + 3], 10) || 0,
+        });
+        k += 4;
+      }
+      paginas.push(slots);
+    }
+    estado.tienda = { shop: parseInt(f[1], 10) || 0, paginas, pagina: 0, sel: null };
+    pintarTienda();
   });
 
   // El servidor manda el inventario y el equipo a TODO EL MAPA, no solo a su
@@ -1195,40 +1956,49 @@ function conectar() {
     });
   });
 
-  // itemworn: indice del jugador y las 7 ranuras de equipo. `setEquipo` ya lee
-  // desde el campo 2 por eso mismo. (PLAYERWORNEQ no lo manda este servidor,
-  // pero se filtra igual porque el resto del codigo los trata como el mismo.)
-  // Los `pic` de cada ranura, para pintarlos sobre el personaje.
-  // El dibujo que se le ve puesto es el MISMO `Pic` del objeto: en el editor
-  // del cliente hay un unico "Sprite del Item". Las filas bajas de la hoja
-  // (alas, armaduras, cascos de perfil, baculos) estan pensadas justo para
-  // eso, y se eligen desde ese mismo selector.
-  const picsDeEquipo = (campos) => [1, 2, 3, 4, 5, 6, 7].map((i) => {
-    const num = parseInt(campos[i + 1], 10) || 0;
-    const d = num && estado.ui.items.get(num);
-    return d ? d.pic : 0;
-  });
-
-  const refrescarEquipo = (e) => {
-    const quien = parseInt(e.detail[1], 10);
-    const pics = picsDeEquipo(e.detail);
-
-    // `itemworn` se emite a TODO el mapa con el indice de su dueno, asi que de
-    // aqui sale tambien el equipo de los demas. Antes se descartaba y cada uno
-    // se veia solo a si mismo vestido. Se guarda por indice porque el paquete
-    // puede llegar antes que el PLAYERDATA que crea a ese jugador.
+  // ITEMWORN porta l'id real de l'objecte. PLAYERWORNEQ porta el numero de
+  // casella (1..24). Al canviar de mapa el segon arriba l'ultim: si es llegeix
+  // com un id, la casella 1 (els dorados) es pinta al cap i una altra casella
+  // es pinta com un arc que no tens. El dibuix el mana nomes ITEMWORN.
+  const EQUIPA = new Set([1, 2, 3, 4, 14, 15, 16]);
+  const idEquipable = (num) => {
+    if (!num) return 0;
+    const d = estado.ui.items.get(num);
+    if (!d) return num;
+    const nom = (d.nombre || '').toLowerCase();
+    if (d.tipo === 11 || d.tipo === 12) return 0;
+    if (/dorad|moneda|\boro\b|guita|\bgold\b|coin|currency|\bllave\b|\bkey\b/.test(nom)) return 0;
+    if (d.tipo && !EQUIPA.has(d.tipo)) return 0;
+    return num;
+  };
+  const pintarEquip = (quien, nums) => {
+    const nets = nums.map(idEquipable);
+    // El servidor, si general.alas_encima esta actiu, intercanvia armadura i
+    // botes al paquet: el client de PC pinta el primer camp sota el segon.
+    // Aqui les ranures son reals (0 armadura, 4 botes) i les botes es pinten
+    // despres, o sigui per sobre de l'armadura.
+    if (nets.length >= 5) {
+      const tmp = nets[0]; nets[0] = nets[4]; nets[4] = tmp;
+    }
+    const pics = nets.map((num) => {
+      const d = num && estado.ui.items.get(num);
+      return d ? d.pic : 0;
+    });
     if (!isNaN(quien)) {
       estado.equipoDe.set(quien, pics);
       const otro = estado.otros.get(quien);
       if (otro) { otro.hojaItems = estado.hojaItems; otro.puesto = pics; }
     }
-
-    if (deOtroJugador(e.detail[1])) return;
-    estado.ui.setEquipo(e.detail);
+    if (quien !== estado.miIndice) return;
+    estado.ui.equipo = nets;
+    estado.ui.repinta();
     estado.jugador.puesto = pics;
+    estado.jugador.hojaItems = estado.hojaItems;
   };
-  red.addEventListener('PLAYERWORNEQ', refrescarEquipo);
-  red.addEventListener('ITEMWORN',     refrescarEquipo);
+  red.addEventListener('ITEMWORN', (e) => {
+    const f = e.detail;
+    pintarEquip(parseInt(f[1], 10), [2, 3, 4, 5, 6, 7, 8].map(i => parseInt(f[i], 10) || 0));
+  });
   red.addEventListener('PLAYERHP', (e) => {
     estado.ui.setVital('hp', +e.detail[2], +e.detail[1]);
     estado.jugador.hp = +e.detail[2]; estado.jugador.hpMax = +e.detail[1];
@@ -1270,10 +2040,32 @@ function conectar() {
   });
 
   // El servidor manda el color de cada mensaje como indice QBColor de VB6.
-  for (const p of ['GLOBALMSG', 'PLAYERMSG', 'BROADCASTMSG', 'MAPMSG', 'ADMINMSG',
+  for (const p of ['GLOBALMSG', 'BROADCASTMSG', 'MAPMSG', 'ADMINMSG',
                    'ALERTMSG', 'PLAINMSG', 'SAYMSG', 'GUILDMSG', 'EMOTEMSG']) {
     red.addEventListener(p, (e) => estado.ui.chat(e.detail[1], color(e.detail[2])));
   }
+  red.addEventListener('PLAYERMSG', (e) => {
+    const t = e.detail[1] || '';
+    if (/apariencia te costar/i.test(t)) costeApariencia = t;
+    if (/raza no puede|no puedes? pasar|no es de tu (raza|clase)/i.test(t)) {
+      const j = estado.jugador;
+      const d = [[0, -1], [0, 1], [-1, 0], [1, 0]][j.dir] || [0, 0];
+      const tx = j.destino ? j.destino.x : j.x + d[0];
+      const ty = j.destino ? j.destino.y : j.y + d[1];
+      tornarEnrere({ x: tx, y: ty });
+    }
+    if (esCombate(t)) {
+      const s = t.toLowerCase();
+      const lado = /no te hace|te quita|te ataca|bloqueas|te ha golpeado|te saca/.test(s) ? 1 : 0;
+      estado.efectos.combate(t, color(e.detail[2]), lado);
+      const so = soDe(t);
+      if (so) estado.audio.efecto(so);
+      return;
+    }
+    estado.ui.chat(t, color(e.detail[2]));
+  });
+
+  red.addEventListener('SPRITECHANGE', () => abrirApariencia());
 
   red.addEventListener('ONLINELIST', (e) => {
     pintarOnline(e.detail.slice(2).filter(s => s));
@@ -1286,23 +2078,105 @@ function conectar() {
     .catch(() => estadoRed('El server esta apagado, volve a intentarlo mas tarde', 'mal'));
 }
 
+function abrirF1() {
+  let box = document.getElementById('f1');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'f1';
+    box.style.cssText = 'position:absolute;left:230px;top:50px;z-index:13;width:460px;background:#ece9d8;color:#111;border:2px solid #808080;padding:8px;font:12px Tahoma,sans-serif';
+    box.innerHTML = '<b>Panel de administracion</b> <button id="f1x" type="button" style="float:right">x</button>'
+      + '<fieldset><legend>Comandos del jugador</legend>'
+      + '<button type="button" data-c="/ban">Banear</button> '
+      + '<button type="button" data-c="/warpmeto">Ir hacia el jugador</button> '
+      + '<button type="button" data-c="/kick">Clikear</button> '
+      + '<button type="button" data-c="/setaccess">Dar Acceso</button><br>'
+      + 'Nivel de acceso: <input id="f1acc" size="4"> '
+      + 'Nombre del jugador: <input id="f1name" size="14"></fieldset>'
+      + '<fieldset><legend>comandos de sprite</legend>'
+      + '<button type="button" data-c="/setsprite">Cambiar mi Sprite</button> '
+      + '<button type="button" data-c="/setplayersprite">Cambiar el Sprite del Pj</button><br>'
+      + 'Numero sprite: <input id="f1spr" size="6"></fieldset>'
+      + '<fieldset><legend>Comandos de Trabajo</legend>'
+      + '<button type="button" data-c="/mapeditor">Editor de mapas</button> '
+      + '<button type="button" data-c="/editspell">Editor de magias</button> '
+      + '<button type="button" data-c="/edititem">Editor de items</button> '
+      + '<button type="button" data-c="/editshop">Editor de comercios</button> '
+      + '<button type="button" data-c="/editnpc">Editor de NPCs</button> '
+      + '<button type="button" data-c="/editarrow">Editar Flechas</button> '
+      + '<button type="button" data-c="/editemoticon">Editar Emoticons</button></fieldset>'
+      + '<fieldset><legend>Comando de los mapas</legend>'
+      + '<button type="button" data-c="/loc">Localizacion</button> '
+      + '<button type="button" data-c="/respawn">Refrescar el mapa</button> '
+      + '<button type="button" data-c="/warpto">Moverse al mapa</button><br>'
+      + 'Numero de mapa: <input id="f1map" size="6"></fieldset>'
+      + '<button id="f1cerrar" type="button">Cerrar</button>';
+    document.getElementById('juego').appendChild(box);
+    box.addEventListener('click', (ev) => {
+      if (ev.target.id === 'f1x' || ev.target.id === 'f1cerrar') { box.style.display = 'none'; return; }
+      const c = ev.target.dataset.c;
+      if (!c) return;
+      const name = box.querySelector('#f1name').value.trim();
+      const acc = box.querySelector('#f1acc').value.trim();
+      const spr = box.querySelector('#f1spr').value.trim();
+      const map = box.querySelector('#f1map').value.trim();
+      let line = c;
+      if (c === '/ban' || c === '/kick' || c === '/warpmeto') line = c + ' ' + name;
+      if (c === '/setaccess') line = '/setaccess ' + name + ' ' + acc;
+      if (c === '/setsprite') line = '/setsprite ' + spr;
+      if (c === '/setplayersprite') line = '/setplayersprite ' + name + ' ' + spr;
+      if (c === '/warpto') line = '/warpto ' + map;
+      estado.red.enviar('saymsg', line.trim());
+    });
+  } else box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+function abrirTutorial() {
+  if (localStorage.getItem('dbo_tutorial_v2') === '1') return;
+  const box = document.getElementById('tutorial');
+  if (box) box.classList.add('visible');
+}
+function cerrarTutorial() {
+  const box = document.getElementById('tutorial');
+  const no = document.getElementById('tutorial-no');
+  if (no && no.checked) localStorage.setItem('dbo_tutorial_v2', '1');
+  else localStorage.removeItem('dbo_tutorial_v2');
+  if (box) box.classList.remove('visible');
+  const menu = document.getElementById('menu');
+  if (menu) menu.style.display = 'none';
+  const carga = document.getElementById('carga');
+  if (carga) carga.style.display = 'none';
+  despertarCanvas();
+  ultimoPedidoMapa = 0;
+  if (document.body.classList.contains('movil')) aplicarZoomMovil();
+}
+
 function atacar() {
   const j = estado.jugador;
-  if (performance.now() < j.atacandoHasta) return;   // no encadenar golpes
-  j.atacar();
+  const ahora = performance.now();
+  if (ahora < (j.proximoGolpe || 0)) return;
+  j.proximoGolpe = ahora + 1000;
   estado.audio.efecto('sword.wav');
   if (estado.enLinea) estado.red.atacar();
 }
 
-function usarRanura(i) {
+function esMonedaOLlave(def) {
+  if (!def) return false;
+  const n = (def.nombre || '').toLowerCase();
+  return /dorad|moneda|\boro\b|guita|\bgold\b|coin|currency|llave|llavero|\bkey\b|\bkeys\b/.test(n);
+}
+
+async function usarRanura(i) {
   if (!estado.enLinea) { estado.ui.chat('No estas conectado al servidor.', '#e07a6a'); return; }
   const r = estado.ui.inv[i];
   if (!r || !r.num) return;
-  // El servidor guarda el equipo por NUMERO de objeto, no por ranura, asi que
-  // dos copias iguales le resultan indistinguibles. Aqui al menos se recuerda
-  // desde que ranura se uso, para marcar esa y no siempre la primera.
+  if (estado.bolsaAbierta) {
+    const cant = await elegirCantidadMoneda(r.num, r.cant || 1, 'añadir');
+    if (cant === null) return;
+    estado.red.enviar('BANKDEPOSIT', i + 1, cant);
+    return;
+  }
   estado.ui.ultimaRanura.set(r.num, i);
-  estado.red.enviar('USEITEM', i + 1);     // el servidor cuenta las ranuras desde 1
+  estado.red.enviar('USEITEM', i + 1);
 }
 
 async function iniciar() {
@@ -1312,10 +2186,11 @@ async function iniciar() {
     barra.style.width = `${Math.round(100 * hechas / total)}%`;
   });
 
-  estado.mapas = recursos.mapas;
+  estado.mapas = new Map();
   estado.audio = new Audio2('assets/sfx');
   estado.musica = new Musica('assets/music', 'assets');
   estado.render = new Render(cv, recursos.tiles);
+  estado.render.hojaSprites = recursos.sprites;
   estado.hojaSprites = recursos.sprites;
   estado.hojaGrandes = recursos.grandes;
   estado.ui = new Interfaz(recursos.items);
@@ -1327,48 +2202,105 @@ async function iniciar() {
   estado.jugador.hojaItems = recursos.items;
   estado.jugador.nombre = '';
 
-  const primero = estado.mapas.has(1) ? 1 : estado.mapas.keys().next().value;
-  entrarAMapa(primero, 15, 15);
-
   $('#carga').style.display = 'none';
   abrirMenu();
   $('#stats').textContent =
-    `${estado.mapas.size} mapas · cargado en ${(recursos.ms / 1000).toFixed(2)} s`;
+    `mapas del servidor · cargado en ${(recursos.ms / 1000).toFixed(2)} s`;
+
+  function blocarSortida() {
+    if (!estado.enLinea || document.fullscreenElement) {
+      if (document.fullscreenElement && navigator.keyboard && navigator.keyboard.lock) {
+        navigator.keyboard.lock(['KeyW', 'KeyR', 'KeyQ', 'KeyT', 'KeyN']).catch(() => {});
+      }
+      return;
+    }
+    const juego = document.getElementById('juego');
+    if (!juego || !juego.requestFullscreen) return;
+    juego.requestFullscreen().then(() => {
+      if (navigator.keyboard && navigator.keyboard.lock) {
+        return navigator.keyboard.lock(['KeyW', 'KeyR', 'KeyQ', 'KeyT', 'KeyN']);
+      }
+    }).catch(() => {});
+  }
 
   addEventListener('keydown', (e) => {
-    // Mientras se escribe en el chat el teclado es del chat, no del juego.
-    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-    // Ojo: "arriba" es la direccion 0, que en JavaScript es falso. Hay que
-    // comprobar la existencia de la clave, no la verdad del valor.
-    if (e.code in MAPA_TECLAS) {
-      teclas.add(e.code);
-      pendiente = MAPA_TECLAS[e.code];
+    if (estado.enLinea && (e.ctrlKey || e.metaKey) && (e.code === 'KeyW' || e.code === 'KeyR' || e.code === 'KeyQ' || e.code === 'KeyT' || e.code === 'KeyN')) {
       e.preventDefault();
+      e.stopPropagation();
+      blocarSortida();
     }
-    if (e.code === 'ControlLeft' || e.code === 'ControlRight') { atacar(); e.preventDefault(); }
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') teclas.add(e.code);
-    if (e.code === 'Digit1') estado.render.escala = 1;
-    if (e.code === 'Digit2') estado.render.escala = 2;
-    if (e.code === 'Digit3') estado.render.escala = 3;
+    if (!enJuego()) return;
+    if (e.code === 'F1') { e.preventDefault(); abrirF1(); return; }
+    if (e.code in movTeclas) {
+      teclas.add(e.code);
+      pendiente = movTeclas[e.code];
+      e.preventDefault();
+      return;
+    }
+    if (esTecla('correr', e.code)) { teclas.add(e.code); e.preventDefault(); return; }
+    if (esTecla('golpe', e.code)) { atacar(); e.preventDefault(); return; }
+    if (esTecla('chat', e.code)) {
+      e.preventDefault();
+      const i = $('#entrada');
+      i.readOnly = false;
+      i.focus();
+      return;
+    }
+    if (esTecla('refrescar', e.code)) { if (!e.repeat) refrescarPosicion(); e.preventDefault(); return; }
+    if (esTecla('vida', e.code)) { usarPocion(5, 'vida'); e.preventDefault(); return; }
+    if (esTecla('mana', e.code)) { usarPocion(6, 'mana'); e.preventDefault(); return; }
+    if (esTecla('energia', e.code)) { usarPocion(7, 'SP'); e.preventDefault(); return; }
+    if (esTecla('girar', e.code)) { girar(); e.preventDefault(); return; }
+    if (esTecla('recoger', e.code)) { if (estado.enLinea) estado.red.recoger(); e.preventDefault(); return; }
+    if (esTecla('lanzar', e.code)) { lanzarMagia(); e.preventDefault(); return; }
+    const k = (e.code.startsWith('Key') && e.code.length === 4) ? e.code[3].toLowerCase()
+      : (e.code.startsWith('Digit') ? e.code.slice(5) : '');
+    if (k && BINDS[k]) {
+      e.preventDefault();
+      estado.hechizoElegido = BINDS[k];
+      if (estado.jugador.moviendo) {
+        lanzarMagia();
+        return;
+      }
+      if (e.repeat) {
+        estado.red.lanzar(BINDS[k]);
+        return;
+      }
+      estado.red.lanzar(BINDS[k]);
+      return;
+    }
   });
-  addEventListener('keyup', (e) => teclas.delete(e.code));
-
-  // Las teclas que documenta la ayuda del propio juego:
-  //   Insert lanza la magia elegida · F6/F7/F8 restauran HP/MP/SP
-  //   Fin gira sin moverse del sitio · Espacio recoge del suelo
-  addEventListener('keydown', (e) => {
-    if (document.activeElement.tagName === 'INPUT') return;
-    switch (e.code) {
-      case 'Insert':  lanzarMagia(); break;
-      case 'F6':      usarPocion(5, 'vida');  break;
-      case 'F7':      usarPocion(6, 'mana');  break;
-      case 'F8':      usarPocion(7, 'SP');    break;
-      case 'End':     girar(); break;
-      case 'Space':   if (estado.enLinea) estado.red.recoger(); break;
-      default:        return;
-    }
+  addEventListener('beforeunload', (e) => {
+    if (!estado.enLinea || document.fullscreenElement) return;
     e.preventDefault();
+    e.returnValue = '';
   });
+
+  addEventListener('keyup', (e) => {
+    teclas.delete(e.code);
+    let sigue = false;
+    for (const c of teclas) if (c in movTeclas) sigue = true;
+    if (vetoTile && !sigue) vetoTile = null;
+  });
+
+  addEventListener('keydown', (e) => {
+    if (!teclasAbiertas()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!esperandoTecla) {
+      if (e.code === 'Escape') cerrarTeclas();
+      return;
+    }
+    if (e.code === 'Escape') { esperandoTecla = null; pintarTeclas(); return; }
+    for (const id of Object.keys(TECLAS_CFG)) {
+      if (id !== esperandoTecla && mismaTecla(TECLAS_CFG[id], e.code)) TECLAS_CFG[id] = '';
+    }
+    TECLAS_CFG[esperandoTecla] = e.code;
+    esperandoTecla = null;
+    guardarTeclas();
+    aplicarTeclas();
+    pintarTeclas();
+  }, true);
 
   // Si la ventana pierde el foco con una tecla pulsada, el keyup nunca llega y
   // el personaje caminaria solo para siempre. Se sueltan todas.
@@ -1379,15 +2311,20 @@ async function iniciar() {
 
   // Doble clic sobre el mapa: seleccionar blanco, igual que el original
   // ("haces 2 click sobre el blanco ya sea oponente o criatura").
-  cv.addEventListener('dblclick', (ev) => {
+  cv.addEventListener('mousedown', () => { if (document.activeElement === cv) cv.blur(); });
+  const marcar = (ev) => {
     if (!estado.enLinea) return;
     const r = cv.getBoundingClientRect();
-    const escalaX = cv.width / r.width, escalaY = cv.height / r.height;
+    const ancho = estado.render.vw || cv.width;
+    const alto = estado.render.vh || cv.height;
+    const escalaX = ancho / r.width, escalaY = alto / r.height;
     const { cx, cy } = estado.render.camara(estado.jugador.px, estado.jugador.py);
     const x = (((ev.clientX - r.left) * escalaX) / estado.render.escala + cx) / TS | 0;
     const y = (((ev.clientY - r.top) * escalaY) / estado.render.escala + cy) / TS | 0;
     estado.red.buscar(x, y);
-  });
+  };
+  cv.addEventListener('click', marcar);
+  cv.addEventListener('dblclick', marcar);
 
   $('#irA').addEventListener('change', (e) => {
     const id = parseInt(e.target.value, 10);
@@ -1397,15 +2334,6 @@ async function iniciar() {
     if (estado.enLinea) estado.red.enviar('WARPTO', id);
     else entrarAMapa(id, 15, 15);
   });
-
-  const lista = $('#irA');
-  for (const [id, m] of [...estado.mapas].sort((a, b) => a[0] - b[0])) {
-    const o = document.createElement('option');
-    o.value = id;
-    o.textContent = `${id} — ${m.nombre || '(vacio)'}`;
-    if (id === primero) o.selected = true;
-    lista.appendChild(o);
-  }
 
   // Pestanas. En el cliente la franja de abajo es SIEMPRE el chat: lo que
   // cambia es el recuadro del dragon. Y Clanes y Opciones abren ventanas
@@ -1431,6 +2359,41 @@ async function iniciar() {
   document.querySelectorAll('[data-cerrar]').forEach(b => {
     b.addEventListener('click', () => b.closest('.ventana').classList.remove('visible'));
   });
+  const nombreClan = () => ((document.getElementById('cl-nombre') || {}).value || '').trim();
+  const pideNombre = () => {
+    const n = nombreClan();
+    if (!n) estado.ui.chat('Escribe un nombre.', '#e07a6a');
+    return n;
+  };
+  const botonClan = (id, fn) => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener('click', fn);
+  };
+  botonClan('cl-fundar', () => {
+    const n = pideNombre();
+    if (!n || !estado.enLinea) return;
+    estado.red.enviar('makeguild', n);
+    estado.ui.chat('Fundando el clan ' + n + '. Hacen falta nivel 20 y 3000 dorados.', '#e8c86a');
+  });
+  botonClan('cl-postulante', () => {
+    const n = pideNombre();
+    if (n && estado.enLinea) estado.red.enviar('guildtrainee', n);
+  });
+  botonClan('cl-miembro', () => {
+    const n = pideNombre();
+    if (n && estado.enLinea) estado.red.enviar('guildmember', n);
+  });
+  botonClan('cl-sacar', () => {
+    const n = pideNombre();
+    if (n && estado.enLinea) estado.red.enviar('guilddisown', n);
+  });
+  botonClan('cl-acceso', () => {
+    const n = pideNombre();
+    if (!n || !estado.enLinea) return;
+    const acc = ((document.getElementById('cl-acceso') || {}).value || '').trim();
+    estado.red.enviar('guildchangeaccess', n, acc || '0');
+  });
+  botonClan('cl-salir', () => { if (estado.enLinea) estado.red.enviar('guildleave'); });
 
   // flechas del inventario
   const desplazar = (d) => {
@@ -1441,6 +2404,25 @@ async function iniciar() {
   $('#btn-sube').addEventListener('click', () => desplazar(-1));
   $('#btn-baja').addEventListener('click', () => desplazar(1));
   $('#btn-lanzar').addEventListener('click', lanzarMagia);
+  const btnTutorial = document.getElementById('tutorial-cerrar');
+  if (btnTutorial) btnTutorial.addEventListener('click', cerrarTutorial);
+  const btnTeclas = document.getElementById('teclas-cerrar');
+  if (btnTeclas) btnTeclas.addEventListener('click', cerrarTeclas);
+  const btnReset = document.getElementById('teclas-reset');
+  if (btnReset) btnReset.addEventListener('click', () => {
+    TECLAS_CFG = Object.assign({}, DEF_TECLAS);
+    esperandoTecla = null;
+    guardarTeclas();
+    aplicarTeclas();
+    pintarTeclas();
+  });
+  const listaTeclas = document.getElementById('teclas-lista');
+  if (listaTeclas) listaTeclas.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-acc]');
+    if (!b) return;
+    esperandoTecla = b.dataset.acc;
+    pintarTeclas();
+  });
 
   // elegir magia con un clic en la lista
   $('#lista-magias').addEventListener('click', (ev) => {
@@ -1454,9 +2436,7 @@ async function iniciar() {
 
   // El boton R del cliente: "refresca la pantalla y sirve para cuando nos
   // quedamos pegados por lag".
-  $('#b-refrescar').addEventListener('click', () => {
-    if (estado.enLinea) estado.red.refrescar();
-  });
+  $('#b-refrescar').addEventListener('click', () => refrescarPosicion());
   // Las casillas de la ventana de Opciones hacen lo que dicen.
   const op = (id, fn) => {
     const c = $(id);
@@ -1476,8 +2456,34 @@ async function iniciar() {
   op('#o-sonidos', v => { if (estado.audio) estado.audio.activo = v; });
 
   $('#b-ayuda').addEventListener('click', () => {
-    for (const l of AYUDA) estado.ui.chat(l, '#e8c86a');
-    $('#entrada').focus();
+    let box = document.getElementById('menu-cuenta');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'menu-cuenta';
+      box.style.cssText = 'position:absolute;left:180px;top:40px;z-index:12;width:560px;height:520px;background:#1b140e;border:2px solid #e0c27a;color:#f0e2c0;padding:6px';
+      box.innerHTML = '<b>Dream Blue Online</b> <button id="mc-x" type="button" style="float:right">Cerrar</button>'
+        + '<iframe id="mc-frame" style="width:100%;height:480px;margin-top:6px;border:0;background:#17121a"></iframe>';
+      document.getElementById('juego').appendChild(box);
+      box.querySelector('#mc-x').onclick = () => { box.style.display = 'none'; };
+    }
+    box.style.display = 'block';
+    const marco = box.querySelector('#mc-frame');
+    marco.src = 'about:blank';
+    fetch('/sesion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user: estado.cuenta || '',
+        password: estado.clave || '',
+        char: (estado.jugador && estado.jugador.nombre) || '',
+      }),
+    }).then(r => r.json()).then(r => {
+      if (!r.ok) {
+        estado.ui.chat(r.msg || 'No he podido abrir la cuenta', '#e07a6a');
+        return;
+      }
+      marco.src = '/panel';
+    }).catch(() => estado.ui.chat('El ? solo entra solo en el puerto 8084.', '#e07a6a'));
   });
 
   // inventario: seleccionar con un clic, usar con doble clic
@@ -1555,22 +2561,44 @@ async function iniciar() {
     // el borde rojo de seleccion no aparecia nunca.
     estado.ui.seleccion = i;
     estado.ui.pintaInventario();
+    if (estado.bolsaAbierta) usarRanura(i);
   });
   // Un clic elige (borde rojo); DOBLE clic usa el objeto, que segun el tipo
   // lo equipa, lo consume o lo aprende. Igual que en el cliente.
   cvInv.addEventListener('dblclick', (ev) => {
+    if (ev.button !== 0) return;
+    if (estado.bolsaAbierta) return;
     const i = ranuraEn(ev);
-    if (i !== null) { ocultarGlobo(); usarRanura(i); }
+    if (i === null) return;
+    ocultarGlobo();
+    estado.ui.seleccion = i;
+    usarRanura(i);
+  });
+  cvInv.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    const i = ranuraEn(ev);
+    if (i === null) return;
+    ocultarGlobo();
+    estado.ui.seleccion = i;
+    estado.ui.pintaInventario();
+    arrojar();
   });
   $('#btn-usar').addEventListener('click', () => {
     if (estado.ui.seleccion !== null) usarRanura(estado.ui.seleccion);
   });
   $('#btn-tirar').addEventListener('click', arrojar);
 
-  // repartir puntos de caracteristicas
+  // El panell va Fuerza, Defensa, Inteligencia, Magia (data-stat 1..4).
+  // El servidor espera 0 fuerza, 1 defensa, 2 magia, 3 inteligencia.
+  const PUNT_AL_SERVIDOR = { '1': 0, '2': 1, '3': 3, '4': 2 };
   document.querySelectorAll('.subir').forEach(b => {
-    b.addEventListener('click', () => {
-      if (estado.enLinea) estado.red.enviar('usestatpoint', b.dataset.stat);
+    b.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!estado.enLinea || !estado.ui || estado.ui.stats.puntos <= 0) return;
+      const idx = PUNT_AL_SERVIDOR[b.dataset.stat];
+      if (idx === undefined) return;
+      estado.red.enviar('usestatpoint', idx);
     });
   });
 
@@ -1579,7 +2607,11 @@ async function iniciar() {
     if (ev.key !== 'Enter') return;
     const t = ev.target.value.trim();
     ev.target.value = '';
+    ev.target.readOnly = true;
+    ev.target.blur();
     if (!t || !estado.enLinea) return;
+    if (t.toLowerCase() === '.f1') { abrirF1(); return; }
+    if (t.toLowerCase() === '.teclado' || t.toLowerCase() === '.teclas') { abrirTeclas(); return; }
     mandarChat(t);
   });
 
@@ -1625,6 +2657,21 @@ async function iniciar() {
     if (cual === 'nuevopj') $('#pjnombre').focus();
   }
 
+  function abrirCrearCuenta() {
+    let box = document.getElementById('crear-web');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'crear-web';
+      box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;width:740px;height:560px;background:#1b140e;border:2px solid #e0c27a;color:#f0e2c0;padding:6px;box-shadow:0 8px 40px #000';
+      box.innerHTML = '<b>Crear cuenta</b> <button id="crear-web-x" type="button" style="float:right">Cerrar</button>'
+        + '<iframe id="crear-web-frame" style="width:100%;height:520px;margin-top:6px;border:0;background:#17121a"></iframe>';
+      document.body.appendChild(box);
+      box.querySelector('#crear-web-x').onclick = () => { box.style.display = 'none'; };
+    }
+    box.style.display = 'block';
+    box.querySelector('#crear-web-frame').src = 'http://' + location.hostname + ':8080/crear';
+  }
+
   $('#z-ingresar').addEventListener('click', () => { estadoRed(''); pantallaMenu('login'); });
   $('#z-info').addEventListener('click',     () => { estadoRed(''); pantallaMenu('credito'); });
   $('#z-aceptar').addEventListener('click', conectar);
@@ -1662,9 +2709,9 @@ async function iniciar() {
       estadoRed(e.message, 'mal');
     }
   }
-  $('#z-nueva').addEventListener('click',   () => { estadoRed(''); pantallaMenu('nueva'); });
+  $('#z-nueva').addEventListener('click',   () => { estadoRed(''); abrirCrearCuenta(); });
   $('#z-borrar').addEventListener('click',  () => { estadoRed(''); pantallaMenu('borrarcta'); });
-  $('#z-crearc').addEventListener('click',  () => accionCuenta(true));
+  $('#z-crearc').addEventListener('click',  () => abrirCrearCuenta());
   $('#z-borrarc').addEventListener('click', () => accionCuenta(false));
 
   // --- eleccion de personaje ---
@@ -1791,17 +2838,404 @@ async function iniciar() {
   // del centro, asi que al crecer se pierde por arriba y por abajo).
   const ALTO_TOTAL = 678;
   const ajustar = () => {
+    if (document.body.classList.contains('movil')) {
+      $('#escala').style.transform = 'none';
+      aplicarZoomMovil();
+      return;
+    }
     const k = Math.min(innerWidth / 950, innerHeight / ALTO_TOTAL, 1);
     $('#escala').style.transform = `scale(${k})`;
   };
   addEventListener('resize', ajustar);
   ajustar();
+  montarMovil();
 
   // expuesto para inspeccionar desde la consola del navegador
   window.__dbo = { estado, DIAG };
 
   fps.t = performance.now();
   requestAnimationFrame(bucle);
+}
+
+let zoomMovil = 1;
+try { zoomMovil = Math.min(2.6, Math.max(0.55, parseFloat(localStorage.getItem('dbo_zoom')) || 1)); } catch (e) {}
+
+function aplicarZoomMovil() {
+  if (!estado.render) return;
+  // La mateixa vista que al PC (642x470). Al mobil nomes s'estira el llenç
+  // amb CSS: canviar els pixels interns el deixava negre a l'iPhone.
+  estado.render.vw = 642;
+  estado.render.vh = 470;
+  const c = document.getElementById('pantalla');
+  const w = window.innerWidth, h = window.innerHeight;
+  const s = Math.max(w / 642, h / 470) * zoomMovil;
+  const cw = Math.round(642 * s), ch = Math.round(470 * s);
+  c.style.position = 'fixed';
+  c.style.width = cw + 'px';
+  c.style.height = ch + 'px';
+  c.style.left = Math.round((w - cw) / 2) + 'px';
+  c.style.top = Math.round((h - ch) / 2) + 'px';
+  c.style.transform = 'none';
+}
+
+function pintarHudMovil() {
+  const ui = estado.ui;
+  if (!ui) return;
+  const v = ui.vitales, s = ui.stats;
+  const posa = (barra, act, max) => {
+    const el = document.getElementById(barra);
+    if (!el) return;
+    const m = Math.max(1, max || 1);
+    el.style.width = Math.max(0, Math.min(100, 100 * (act || 0) / m)) + '%';
+  };
+  posa('mv-hp', v.hp, v.hpMax);
+  posa('mv-mp', v.mp, v.mpMax);
+  posa('mv-sp', v.sp, v.spMax);
+  posa('mv-xp', s.exp, s.expSig);
+  const nv = document.getElementById('mv-nv');
+  const hp = document.getElementById('mv-hp-n');
+  const mp = document.getElementById('mv-mp-n');
+  const sp = document.getElementById('mv-sp-n');
+  const st = document.getElementById('mv-st');
+  if (nv) nv.textContent = 'Nv' + (s.nivel || 0);
+  if (hp) hp.textContent = (v.hp || 0);
+  if (mp) mp.textContent = (v.mp || 0);
+  if (sp) sp.textContent = (v.sp || 0);
+  if (st) st.textContent = 'F' + (s.str || 0) + ' D' + (s.def || 0) + ' I' + (s.speed || 0) + ' M' + (s.magi || 0);
+  const log = document.getElementById('mv-log');
+  const src = document.getElementById('chatlog');
+  if (log && src) {
+    const t = [...src.children].slice(-3).map(n => n.textContent).join('\n');
+    if (log.textContent !== t) log.textContent = t;
+  }
+}
+
+function montarMovil() {
+  if (!document.body.classList.contains('movil')) return;
+  const zoomA = (d) => {
+    zoomMovil = Math.min(2.6, Math.max(0.55, Math.round((zoomMovil + d) * 100) / 100));
+    localStorage.setItem('dbo_zoom', String(zoomMovil));
+    aplicarZoomMovil();
+  };
+  document.getElementById('mv-mas').addEventListener('pointerup', (e) => { e.preventDefault(); zoomA(0.15); });
+  document.getElementById('mv-menos').addEventListener('pointerup', (e) => { e.preventDefault(); zoomA(-0.15); });
+  const foraDeFinestra = (el) => !el.closest(
+    '#tutorial, #dialogo, #tienda, #teclas-win, #f1, #mv-menu, #mv-hoja, #mv-elegir, #mv-teclado, #mv-jugar, button, input, label, select, textarea'
+  );
+  const algunaOberta = () => {
+    const oberta = (id, classe) => {
+      const el = document.getElementById(id);
+      return !!(el && el.classList.contains(classe));
+    };
+    const td = document.getElementById('tienda');
+    const f1 = document.getElementById('f1');
+    const kb = document.getElementById('mv-teclado');
+    return oberta('tutorial', 'visible') || oberta('dialogo', 'visible') || oberta('teclas-win', 'visible')
+      || oberta('mv-menu', 'on') || oberta('mv-hoja', 'on') || oberta('mv-elegir', 'on')
+      || (td && td.style.display === 'block')
+      || (f1 && f1.style.display !== 'none')
+      || (kb && !kb.hidden);
+  };
+  let tancarClick = false;
+  document.addEventListener('pointerdown', (e) => {
+    if (!foraDeFinestra(e.target) || !algunaOberta()) return;
+    tancarClick = true;
+    e.preventDefault();
+    e.stopPropagation();
+    cerrarTutorial();
+    cerrarTeclas();
+    cerrarTienda();
+    const dlg = document.getElementById('dialogo');
+    if (dlg) dlg.classList.remove('visible');
+    const f1 = document.getElementById('f1');
+    if (f1) f1.style.display = 'none';
+    document.getElementById('mv-menu').classList.remove('on');
+    document.getElementById('mv-hoja').classList.remove('on');
+    document.getElementById('mv-elegir').classList.remove('on');
+    const kb = document.getElementById('mv-teclado');
+    if (kb) kb.hidden = true;
+  }, true);
+  document.addEventListener('click', (e) => {
+    if (!tancarClick) return;
+    tancarClick = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+  const base = document.getElementById('mv-base');
+  const knob = document.getElementById('mv-knob');
+  if (!base) return;
+  const codigoDir = {
+    [DIR.ARRIBA]: () => codigoDe('arriba') || 'KeyW',
+    [DIR.ABAJO]: () => codigoDe('abajo') || 'KeyS',
+    [DIR.IZQ]: () => codigoDe('izq') || 'KeyA',
+    [DIR.DER]: () => codigoDe('der') || 'KeyD',
+  };
+  let stick = null;
+  const soltarStick = () => {
+    if (!stick) return;
+    teclas.delete(stick.code);
+    stick = null;
+    knob.style.left = '40px';
+    knob.style.top = '40px';
+  };
+  const dirDe = (dx, dy) => {
+    if (Math.hypot(dx, dy) < 16) return null;
+    const a = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
+    const q = Math.round(a / (Math.PI / 2)) % 4;
+    return [DIR.DER, DIR.ABAJO, DIR.IZQ, DIR.ARRIBA][q];
+  };
+  const moverStick = (e) => {
+    const r = base.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    let dx = e.clientX - cx, dy = e.clientY - cy;
+    const dist = Math.hypot(dx, dy) || 1;
+    const max = 40;
+    const k = Math.min(max, dist) / dist;
+    knob.style.left = (40 + dx * k) + 'px';
+    knob.style.top = (40 + dy * k) + 'px';
+    const dir = dirDe(dx, dy);
+    const code = dir === null ? '' : codigoDir[dir]();
+    if (stick && stick.code !== code) teclas.delete(stick.code);
+    if (code) {
+      teclas.add(code);
+      pendiente = dir;
+    }
+    stick = { id: e.pointerId, code };
+  };
+  base.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#mv-correr')) return;
+    e.preventDefault();
+    base.setPointerCapture(e.pointerId);
+    moverStick(e);
+  });
+  base.addEventListener('pointermove', (e) => {
+    if (!stick || e.pointerId !== stick.id) return;
+    e.preventDefault();
+    moverStick(e);
+  });
+  base.addEventListener('pointerup', soltarStick);
+  base.addEventListener('pointercancel', soltarStick);
+  addEventListener('blur', soltarStick);
+
+  const correr = document.getElementById('mv-correr');
+  correr.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    movilCorre = !movilCorre;
+    correr.classList.toggle('on', movilCorre);
+    correr.textContent = movilCorre ? 'CORRER' : 'ANDAR';
+  });
+
+  const pulsar = (id, fn) => {
+    const b = document.getElementById(id);
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); });
+    b.addEventListener('pointerup', (e) => { e.preventDefault(); fn(); });
+  };
+  pulsar('mv-atacar', () => { if (enJuego()) atacar(); });
+  pulsar('mv-recoger', () => { if (estado.enLinea) estado.red.recoger(); });
+
+  let huecos = [0, 0, 0];
+  try { huecos = JSON.parse(localStorage.getItem('dbo_movil_magia') || '[0,0,0]'); } catch (e) {}
+  if (!Array.isArray(huecos) || huecos.length !== 3) huecos = [0, 0, 0];
+  const guardarHuecos = () => localStorage.setItem('dbo_movil_magia', JSON.stringify(huecos));
+  const nomHueco = (slot) => {
+    if (!slot || !estado.hechizos || !estado.ui) return '—';
+    const num = estado.hechizos[slot - 1];
+    if (!num) return '—';
+    const n = estado.ui.nombreHechizo(num);
+    return n.length > 9 ? n.slice(0, 8) + '…' : n;
+  };
+  const botonesH = [...document.querySelectorAll('#mv-magias button')];
+  const pintarHuecos = () => botonesH.forEach((b, i) => { b.textContent = nomHueco(huecos[i]); });
+  pintarHuecos();
+  setInterval(pintarHuecos, 1000);
+
+  const elegir = document.getElementById('mv-elegir');
+  const listaMag = document.getElementById('mv-lista-magia');
+  let asignando = -1;
+  const cerrarElegir = () => { elegir.classList.remove('on'); asignando = -1; };
+  document.getElementById('mv-elegir-x').addEventListener('click', cerrarElegir);
+  const abrirElegir = (i) => {
+    asignando = i;
+    listaMag.innerHTML = '';
+    let alguna = false;
+    for (let s = 0; s < 20; s++) {
+      const num = estado.hechizos && estado.hechizos[s];
+      if (!num) continue;
+      alguna = true;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = (s + 1) + '. ' + estado.ui.nombreHechizo(num);
+      b.addEventListener('click', () => {
+        huecos[i] = s + 1;
+        guardarHuecos();
+        pintarHuecos();
+        cerrarElegir();
+      });
+      listaMag.appendChild(b);
+    }
+    if (!alguna) {
+      const p = document.createElement('p');
+      p.style.color = '#e07a6a';
+      p.textContent = 'Todavia no tienes magias aprendidas.';
+      listaMag.appendChild(p);
+    }
+    elegir.classList.add('on');
+  };
+  botonesH.forEach((b) => {
+    let timer = 0;
+    let largo = false;
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      largo = false;
+      timer = setTimeout(() => { largo = true; abrirElegir(+b.dataset.h); }, 450);
+    });
+    b.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      clearTimeout(timer);
+      if (largo) return;
+      const slot = huecos[+b.dataset.h];
+      if (!slot) { abrirElegir(+b.dataset.h); return; }
+      if (!enJuego()) return;
+      estado.hechizoElegido = slot;
+      lanzarMagia();
+    });
+    b.addEventListener('pointerleave', () => clearTimeout(timer));
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
+
+  const menu = document.getElementById('mv-menu');
+  const hoja = document.getElementById('mv-hoja');
+  const cuerpo = document.getElementById('mv-hoja-cuerpo');
+  const prestados = [];
+  const devolver = () => {
+    while (prestados.length) {
+      const el = prestados.pop();
+      el.style.transform = '';
+      el.style.position = '';
+      el.style.left = '';
+      el.style.top = '';
+      el.style.width = '';
+      el.style.maxHeight = '';
+      el.style.overflow = '';
+      const sitio = el._movil;
+      if (sitio && sitio.padre) {
+        if (sitio.next && sitio.next.parentNode === sitio.padre) sitio.padre.insertBefore(el, sitio.next);
+        else sitio.padre.appendChild(el);
+      }
+      if (el.classList.contains('ventana')) el.classList.remove('visible');
+      if (el.id === 'f1' || el.id === 'menu-cuenta') el.style.display = 'none';
+    }
+    cuerpo.innerHTML = '';
+    hoja.style.paddingBottom = '';
+  };
+  const tomar = (el) => {
+    if (!el) return;
+    if (!el._movil) el._movil = { padre: el.parentNode, next: el.nextSibling };
+    prestados.push(el);
+    cuerpo.appendChild(el);
+  };
+  const cerrarHoja = () => { hoja.classList.remove('on'); devolver(); };
+  document.getElementById('mv-hoja-x').addEventListener('click', cerrarHoja);
+  const abrirPanel = (tit, fn) => {
+    menu.classList.remove('on');
+    devolver();
+    fn();
+    document.getElementById('mv-hoja-tit').textContent = tit;
+    hoja.classList.add('on');
+    const caja = document.getElementById('caja');
+    if (caja && caja.parentNode === cuerpo) {
+      const k = Math.min((innerWidth - 24) / 190, 2.3);
+      caja.style.position = 'relative';
+      caja.style.left = 'auto';
+      caja.style.top = 'auto';
+      caja.style.transform = 'scale(' + k + ')';
+      caja.style.transformOrigin = 'top center';
+      cuerpo.parentElement.style.paddingBottom = Math.round(183 * (k - 1) + 24) + 'px';
+    }
+  };
+  const grupos = [
+    ['Personatge', [
+      ['Inventari', () => abrirPanel('Inventari', () => { estado.ui.mostrarPestana('inventario'); tomar(document.getElementById('caja')); })],
+      ['Equip', () => abrirPanel('Equip', () => { estado.ui.mostrarPestana('equipo'); tomar(document.getElementById('caja')); })],
+      ['Màgies', () => abrirPanel('Màgies', () => { estado.ui.mostrarPestana('magias'); tomar(document.getElementById('caja')); })],
+      ['Vida', () => { menu.classList.remove('on'); usarPocion(5); }],
+      ['Mana', () => { menu.classList.remove('on'); usarPocion(6); }],
+      ['Energia', () => { menu.classList.remove('on'); usarPocion(7); }],
+    ]],
+    ['Mon', [
+      ['Qui hi ha', () => abrirPanel('En linia', () => { estado.ui.mostrarPestana('online'); tomar(document.getElementById('caja')); })],
+      ['Clans', () => abrirPanel('Clans', () => {
+        const v = document.getElementById('v-clanes');
+        v.classList.add('visible');
+        v.style.position = 'relative'; v.style.left = 'auto'; v.style.top = 'auto'; v.style.width = '100%';
+        tomar(v);
+      })],
+      ['Opcions', () => abrirPanel('Opcions', () => {
+        const v = document.getElementById('v-opciones');
+        v.classList.add('visible');
+        v.style.position = 'relative'; v.style.left = 'auto'; v.style.top = 'auto'; v.style.width = '100%';
+        tomar(v);
+      })],
+      ['Ajuda', () => abrirPanel('Ajuda', () => {
+        document.getElementById('b-ayuda').click();
+        const box = document.getElementById('menu-cuenta');
+        if (!box) return;
+        box.style.display = 'block';
+        box.style.position = 'relative';
+        box.style.left = 'auto';
+        box.style.top = 'auto';
+        box.style.width = '100%';
+        box.style.height = '70vh';
+        tomar(box);
+      })],
+      ['Refrescar', () => { menu.classList.remove('on'); refrescarPosicion(); }],
+      ['Consola', () => abrirPanel('Consola', () => {
+        abrirF1();
+        const f = document.getElementById('f1');
+        if (!f) return;
+        f.style.display = 'block';
+        f.style.position = 'relative'; f.style.left = 'auto'; f.style.top = 'auto'; f.style.width = '100%';
+        tomar(f);
+      })],
+    ]],
+  ];
+  const lista = document.getElementById('mv-menu-lista');
+  for (const [titol, entrades] of grupos) {
+    const h = document.createElement('div');
+    h.className = 'mv-grup';
+    h.textContent = titol;
+    lista.appendChild(h);
+    for (const [nom, fn] of entrades) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = nom;
+      b.addEventListener('click', fn);
+      lista.appendChild(b);
+    }
+  }
+  document.getElementById('mv-tornar').addEventListener('click', () => menu.classList.remove('on'));
+  document.getElementById('mv-menu').querySelector('#mv-x').addEventListener('click', () => menu.classList.remove('on'));
+  pulsar('mv-menu', () => { cerrarHoja(); menu.classList.add('on'); });
+
+  const teclado = document.getElementById('mv-teclado');
+  const msg = document.getElementById('mv-msg');
+  const enviar = () => {
+    const t = msg.value.trim();
+    msg.value = '';
+    msg.blur();
+    teclado.hidden = true;
+    if (t && estado.enLinea) mandarChat(t);
+  };
+  document.getElementById('mv-chat').addEventListener('pointerup', (e) => {
+    e.preventDefault();
+    teclado.hidden = false;
+    msg.focus();
+  });
+  document.getElementById('mv-enviar').addEventListener('click', enviar);
+  msg.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); enviar(); }
+  });
 }
 
 iniciar().catch(e => {

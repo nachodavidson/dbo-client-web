@@ -12,13 +12,20 @@ const ENCIMA = [5, 6, 7, 8];    // fringes: se dibujan por delante del jugador
 export class Render {
   constructor(lienzo, hojas) {
     this.cv = lienzo;
-    this.ctx = lienzo.getContext('2d', { alpha: false });
+    this.ctx = lienzo.getContext('2d');
     this.hojas = hojas;              // tiles0..6
     this.cache = new Map();
-    this.escala = 1;   // el aumento visual lo hace el CSS
-    this.hojaItems = null;           // para los objetos tirados en el suelo
+    this.escala = 1;
+    this.vw = 642;
+    this.vh = 470;
+    this._dpr = 1;
+    this.hojaItems = null;
+    this.hojaSprites = null;
+    this._maniId = 0;
+    this._mani = [];
     this.noche = false;
     this.nombreMapa = '';            // el cliente lo escribe arriba del visor
+    this.moralMapa = 1;
     this.opciones = { nombreJugador: true, barraJugador: true,
                       nombreNpc: true, barraNpc: true };
     this.clima = 0;                  // 0 nada, 1 lluvia, 2 nieve, 3 tormenta
@@ -33,19 +40,26 @@ export class Render {
   }
 
   componer(m) {
+    const firma = m.abiertas ? [...m.abiertas].sort().join('|') : '';
     const enCache = this.cache.get(m.id);
-    if (enCache) return enCache;
+    if (enCache && enCache.firma === firma) return enCache;
 
     const w = ANCHO * TS, h = ALTO * TS;
     const capa = (slots, fondo) => {
-      const c = new OffscreenCanvas(w, h);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
       const g = c.getContext('2d');
       this._sinSuavizado(g);
       if (fondo) { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); }
       for (let y = 0; y < ALTO; y++) {
         for (let x = 0; x < ANCHO; x++) {
           const i = idx(x, y);
+          const tipo = m.tipos[i];
+          const oberta = m.abiertas && m.abiertas.has(x + ',' + y)
+            && (tipo === 5 || tipo === 15);
           for (const s of slots) {
+            if (oberta && s !== 0) continue;
             const v = m.capas[i * 9 + s];
             if (v === 0) continue;
             const hoja = this.hojas[m.hojas[i * 9 + s]];
@@ -62,7 +76,7 @@ export class Render {
       return c;
     };
 
-    const compuesto = { debajo: capa(DEBAJO, true), encima: capa(ENCIMA, false) };
+    const compuesto = { debajo: capa(DEBAJO, true), encima: capa(ENCIMA, false), firma };
     this.cache.set(m.id, compuesto);
     if (this.cache.size > CACHE_MAX) this.cache.delete(this.cache.keys().next().value);
     return compuesto;
@@ -71,7 +85,7 @@ export class Render {
   // Devuelve la esquina superior izquierda de la camara, centrada en el jugador
   // y sin salirse del mapa (igual que el original).
   camara(px, py) {
-    const vw = this.cv.width / this.escala, vh = this.cv.height / this.escala;
+    const vw = this.vw, vh = this.vh;
     const mw = ANCHO * TS, mh = ALTO * TS;
     let cx = px + TS / 2 - vw / 2, cy = py + TS / 2 - vh / 2;
     cx = mw <= vw ? (mw - vw) / 2 : Math.max(0, Math.min(cx, mw - vw));
@@ -79,34 +93,95 @@ export class Render {
     return { cx: Math.round(cx), cy: Math.round(cy) };
   }
 
+  // Si el visor es mes gran que el mapa (un mobil alt), el retall sortia
+  // del llenç i el navegador llençava un error: el joc es quedava negre.
+  _blit(img, sx, sy, sw, sh, dx, dy, dw, dh) {
+    const iw = img.width, ih = img.height;
+    if (!iw || !ih || sw <= 0 || sh <= 0) return;
+    let x = sx, y = sy, w = sw, h = sh;
+    let ox = dx, oy = dy, ow = dw, oh = dh;
+    if (x < 0) { const c = -x; ox += c * ow / w; ow -= c * ow / w; w -= c; x = 0; }
+    if (y < 0) { const c = -y; oy += c * oh / h; oh -= c * oh / h; h -= c; y = 0; }
+    if (x + w > iw) { const c = x + w - iw; ow -= c * ow / w; w -= c; }
+    if (y + h > ih) { const c = y + h - ih; oh -= c * oh / h; h -= c; }
+    if (w < 1 || h < 1 || ow < 1 || oh < 1) return;
+    this.ctx.drawImage(img, x, y, w, h, ox, oy, ow, oh);
+  }
+
+  _preparar() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.round(this.vw * dpr), h = Math.round(this.vh * dpr);
+    if (this.cv.width !== w || this.cv.height !== h) {
+      this.cv.width = w;
+      this.cv.height = h;
+    }
+    this._dpr = dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return dpr;
+  }
+
+  _maniquies(m) {
+    if (this._maniId === m.id && this._mani) return this._mani;
+    const lista = [];
+    for (let y = 0; y < ALTO; y++) {
+      for (let x = 0; x < ANCHO; x++) {
+        const i = idx(x, y);
+        if (m.tipos[i] !== 13) continue;
+        const sprite = m.datos[i * 3];
+        if (!sprite) continue;
+        lista.push({ x, y, sprite });
+      }
+    }
+    this._maniId = m.id;
+    this._mani = lista;
+    return lista;
+  }
+
+  _maniqui(ctx, cx, cy, man) {
+    const hoja = this.hojaSprites;
+    if (!hoja) return;
+    const f = 3;
+    const sy = man.sprite * TS;
+    if (sy + TS > hoja.height) return;
+    ctx.drawImage(hoja, f * TS, sy, TS, TS, man.x * TS - cx, man.y * TS - cy, TS, TS);
+  }
+
   dibujar(m, actores, px, py, mundo) {
     const { ctx } = this;
     const comp = this.componer(m);
+    this._preparar();
     const { cx, cy } = this.camara(px, py);
-    const vw = this.cv.width / this.escala, vh = this.cv.height / this.escala;
+    const vw = this.vw, vh = this.vh;
 
     this._sinSuavizado(ctx);
-    ctx.save();
-    ctx.scale(this.escala, this.escala);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
-    ctx.drawImage(comp.debajo, cx, cy, vw, vh, 0, 0, vw, vh);
+    this._blit(comp.debajo, cx, cy, vw, vh, 0, 0, vw, vh);
 
     // Los actores se ordenan por Y para que quien esta mas abajo tape a quien
     // esta mas arriba, como en el juego original.
     // Los objetos tirados van por debajo de todo el mundo: se pisan.
     if (mundo && mundo.suelo && this.hojaItems) this._suelo(ctx, mundo.suelo, cx, cy);
 
-    for (const a of [...actores].sort((p, q) => p.y - q.y)) a.dibujar(ctx, cx, cy);
+    const todos = [...actores];
+    if (this.hojaSprites) {
+      for (const man of this._maniquies(m)) {
+        todos.push({ y: man.y, dibujar: (ctx2, cx2, cy2) => this._maniqui(ctx2, cx2, cy2, man) });
+      }
+    }
+    for (const a of todos.sort((p, q) => p.y - q.y)) a.dibujar(ctx, cx, cy);
 
     if (mundo && mundo.efectos) mundo.efectos.dibujar(ctx, cx, cy);
 
-    ctx.drawImage(comp.encima, cx, cy, vw, vh, 0, 0, vw, vh);
+    this._blit(comp.encima, cx, cy, vw, vh, 0, 0, vw, vh);
+
+    if (mundo && mundo.efectos) mundo.efectos.dibujarMagia(ctx, cx, cy);
 
     // Nombres y barras de vida: por encima del fringe, como el original, para
     // que no los tape un arbol. El nombre estaba dentro de Actor.dibujar, o sea
     // por debajo, y en los mapas con arboles los jugadores salian anonimos.
+    ctx.imageSmoothingEnabled = true;
     for (const a of actores) {
       if (a.esNpc ? this.opciones.nombreNpc : this.opciones.nombreJugador) {
         a.dibujarNombre(ctx, cx, cy);
@@ -117,18 +192,20 @@ export class Render {
 
     this._ambiente(ctx, vw, vh);
     this._titulo(ctx, vw);
-    ctx.restore();
+    if (mundo && mundo.efectos) mundo.efectos.dibujarCombate(ctx, vw, vh);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     return { cx, cy };
   }
 
   // El nombre del mapa, centrado arriba del visor, como en el cliente.
   _titulo(ctx, vw) {
     if (!this.nombreMapa) return;
-    ctx.font = 'bold 13px "Courier New", monospace';
+    ctx.font = '600 16px Tahoma, Verdana, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#000';
     ctx.fillText(this.nombreMapa, vw / 2 + 1, 19);
-    ctx.fillStyle = '#f0e8c8';
+    const moral = this.moralMapa | 0;
+    ctx.fillStyle = moral === 2 ? '#3dde55' : (moral === 1 ? '#f4efe0' : '#ff4040');
     ctx.fillText(this.nombreMapa, vw / 2, 18);
     ctx.textAlign = 'left';
   }
